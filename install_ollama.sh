@@ -1,5 +1,5 @@
 #!/bin/bash
-# SFUZZ - Ollama Auto-Installer
+# SFUZZ - Ollama Auto-Installer (Fixed Version)
 # Author: Suman Das
 # License: MIT
 
@@ -19,7 +19,7 @@ echo " ╚════██║██╔══╝  ██║   ██║ ██�
 echo " ███████║███████╗╚██████╔╝███████╗███████╗"
 echo " ╚══════╝╚══════╝ ╚═════╝ ╚══════╝╚══════╝"
 echo -e "${NC}"
-echo "           Ollama Auto-Installer v1.0"
+echo "           Ollama Auto-Installer v1.1"
 echo "    ──────────────────────────────────────────────────────────"
 
 # Function to run commands with error handling
@@ -38,51 +38,61 @@ run_command() {
     fi
 }
 
-# Check if Ollama is already installed
-check_ollama_installed() {
-    if command -v ollama &> /dev/null; then
-        echo -e "${GREEN}[INFO]${NC} Ollama is already installed!"
+# Check if Ollama is running
+check_ollama_running() {
+    if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+        echo -e "${GREEN}[INFO]${NC} Ollama service is running"
         return 0
     else
+        echo -e "${YELLOW}[WARNING]${NC} Ollama service is not running"
         return 1
     fi
 }
 
-# Install Ollama on Linux
-install_linux() {
-    echo -e "${CYAN}[INSTALL]${NC} Installing Ollama on Linux..."
+# Start Ollama service
+start_ollama_service() {
+    echo -e "${CYAN}[SERVICE]${NC} Starting Ollama service..."
     
-    run_command "curl -fsSL https://ollama.ai/install.sh | sh" "Downloading and installing Ollama"
-    
-    # Start Ollama service
-    if command -v systemctl &> /dev/null; then
-        run_command "sudo systemctl enable ollama" "Enabling Ollama service"
-        run_command "sudo systemctl start ollama" "Starting Ollama service"
-    fi
-}
-
-# Install Ollama on macOS
-install_macos() {
-    echo -e "${CYAN}[INSTALL]${NC} Installing Ollama on macOS..."
-    
-    # Check if Homebrew is available
+    # Try different methods to start Ollama
     if command -v brew &> /dev/null; then
-        run_command "brew install ollama" "Installing Ollama via Homebrew"
-    else
-        run_command "curl -fsSL https://ollama.ai/install.sh | sh" "Downloading and installing Ollama"
+        # macOS with Homebrew
+        echo -e "${CYAN}[SERVICE]${NC} Starting via Homebrew services..."
+        brew services start ollama
+        sleep 5
     fi
+    
+    # Alternative method: direct start
+    if ! check_ollama_running; then
+        echo -e "${CYAN}[SERVICE]${NC} Starting Ollama directly..."
+        nohup ollama serve > /tmp/ollama.log 2>&1 &
+        sleep 8
+    fi
+    
+    # Wait for service to be ready
+    local max_attempts=10
+    local attempt=1
+    
+    while [ $attempt -le $max_attempts ]; do
+        if check_ollama_running; then
+            echo -e "${GREEN}[SUCCESS]${NC} Ollama service started successfully!"
+            return 0
+        fi
+        echo -e "${YELLOW}[WAIT]${NC} Waiting for Ollama service to start... (attempt $attempt/$max_attempts)"
+        sleep 3
+        ((attempt++))
+    done
+    
+    echo -e "${RED}[ERROR]${NC} Failed to start Ollama service after $max_attempts attempts"
+    echo -e "${YELLOW}[TROUBLESHOOT]${NC} Try starting manually: ollama serve"
+    return 1
 }
 
-# Install Ollama on Windows (WSL)
-install_windows() {
-    echo -e "${CYAN}[INSTALL]${NC} Installing Ollama on Windows (WSL)..."
-    
-    # Check if we're in WSL
-    if grep -q Microsoft /proc/version &> /dev/null; then
-        run_command "curl -fsSL https://ollama.ai/install.sh | sh" "Downloading and installing Ollama in WSL"
+# Check if Ollama is installed
+check_ollama_installed() {
+    if command -v ollama &> /dev/null; then
+        echo -e "${GREEN}[INFO]${NC} Ollama is installed!"
+        return 0
     else
-        echo -e "${YELLOW}[INFO]${NC} Please download Ollama for Windows from: https://ollama.ai/download"
-        echo -e "${YELLOW}[INFO]${NC} Run the installer manually and restart your terminal."
         return 1
     fi
 }
@@ -110,13 +120,18 @@ verify_installation() {
     echo -e "\n${CYAN}[VERIFY]${NC} Verifying installation..."
     
     if check_ollama_installed; then
-        echo -e "${GREEN}[SUCCESS]${NC} Ollama is installed and working!"
+        echo -e "${GREEN}[SUCCESS]${NC} Ollama is installed!"
         
-        # Show installed models
-        echo -e "${CYAN}[MODELS]${NC} Checking installed models..."
-        ollama list
-        
-        return 0
+        # Start service
+        if start_ollama_service; then
+            # Show installed models
+            echo -e "${CYAN}[MODELS]${NC} Checking installed models..."
+            ollama list
+            return 0
+        else
+            echo -e "${YELLOW}[WARNING]${NC} Ollama installed but service not running"
+            return 1
+        fi
     else
         echo -e "${RED}[ERROR]${NC} Ollama installation verification failed!"
         return 1
@@ -127,49 +142,22 @@ verify_installation() {
 main() {
     # Check if already installed
     if check_ollama_installed; then
-        download_model
+        echo -e "${GREEN}[INFO]${NC} Ollama is already installed!"
+        
+        # Start service and download models
+        if start_ollama_service; then
+            download_model
+        else
+            echo -e "${YELLOW}[WARNING]${NC} Could not start Ollama service. Models not downloaded."
+        fi
+        
         verify_installation
         return 0
     fi
     
-    # Detect OS and install
-    case "$(uname -s)" in
-        Linux*)
-            install_linux
-            ;;
-        Darwin*)
-            install_macos
-            ;;
-        CYGWIN*|MINGW32*|MINGW64*|MSYS*)
-            install_windows
-            ;;
-        *)
-            echo -e "${RED}[ERROR]${NC} Unsupported operating system: $(uname -s)"
-            echo -e "${YELLOW}[INFO]${NC} Please install Ollama manually from: https://ollama.ai"
-            return 1
-            ;;
-    esac
-    
-    # Download model and verify if installation was successful
-    if [ $? -eq 0 ]; then
-        download_model
-        verify_installation
-        
-        if [ $? -eq 0 ]; then
-            echo -e "\n${GREEN}==================================================${NC}"
-            echo -e "${GREEN}[COMPLETE]${NC} Ollama installation successful!"
-            echo -e "${CYAN}[NEXT]${NC} Run SFUZZ with AI mode: python3 sfuzz.py -d example.com --ai-mode deep"
-            echo -e "${GREEN}==================================================${NC}"
-        else
-            echo -e "${YELLOW}[WARNING]${NC} Installation may need a system restart."
-        fi
-    else
-        echo -e "\n${RED}==================================================${NC}"
-        echo -e "${RED}[FAILED]${NC} Ollama installation failed!"
-        echo -e "${YELLOW}[TROUBLESHOOT]${NC} Please install manually from: https://ollama.ai"
-        echo -e "${RED}==================================================${NC}"
-        return 1
-    fi
+    echo -e "${YELLOW}[INFO]${NC} Ollama not found. Please install manually from: https://ollama.ai"
+    echo -e "${YELLOW}[INFO]${NC} After installation, run this script again to set up models."
+    return 1
 }
 
 # Run main function
