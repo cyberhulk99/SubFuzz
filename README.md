@@ -59,11 +59,20 @@ After cloning, review `tools/SubFuzz/README.md` for SubFuzz-specific usage. You 
 ### Wordlists
 The tool requires wordlists for effective scanning. Due to size constraints, large wordlists are not included in the repository. You can:
 
-1. Download the 2m-subdomains.txt wordlist from SecLists:
+1. Download the Assetnote 2M subdomains wordlist (recommended):
 ```bash
 mkdir -p wordlists/subdomains
-curl -o wordlists/subdomains/2m-subdomains.txt https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/DNS/subdomains-top1million-20000.txt
+wget -O wordlists/subdomains/2m-subdomains.txt https://raw.githubusercontent.com/assetnote/commonspeak2-wordlists/master/subdomains/subdomains.txt
+# If wget is not available, use curl:
+# curl -o wordlists/subdomains/2m-subdomains.txt https://raw.githubusercontent.com/assetnote/commonspeak2-wordlists/master/subdomains/subdomains.txt
 ```
+
+This wordlist contains over 2 million unique subdomains gathered from various sources including:
+- DNS datasets
+- CommonCrawl data
+- Certificate Transparency logs
+- Web crawling results
+- Public datasets
 
 2. Or use your own custom wordlists by placing them in:
    - `wordlists/subdomains/` - for subdomain wordlists

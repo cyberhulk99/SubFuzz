@@ -1503,6 +1503,30 @@ def crawl_website(url, max_pages=100):
     """Enhanced website crawling"""
     print(f"{Fore.CYAN}[CRAWL]{Style.RESET_ALL} Crawling {url} (max {max_pages} pages)")
     
+    try:
+        # Ensure URL has scheme
+        if not url.startswith(('http://', 'https://')):
+            url = 'https://' + url
+        
+        # Try HTTPS first
+        response = requests.get(url, timeout=args.timeout, verify=False)
+        print(f"{Fore.GREEN}[CRAWL]{Style.RESET_ALL} Initial connection successful: {response.status_code}")
+        if response.status_code == 200:
+            add_live_url(url, response.status_code, 'crawl')
+    except requests.exceptions.RequestException as e:
+        print(f"{Fore.YELLOW}[CRAWL]{Style.RESET_ALL} Initial connection failed: {e}")
+        try:
+            # Try HTTP if HTTPS fails
+            if url.startswith('https://'):
+                url = 'http://' + url[8:]
+                response = requests.get(url, timeout=args.timeout, verify=False)
+                print(f"{Fore.GREEN}[CRAWL]{Style.RESET_ALL} HTTP connection successful: {response.status_code}")
+                if response.status_code == 200:
+                    add_live_url(url, response.status_code, 'crawl')
+        except requests.exceptions.RequestException as e:
+            print(f"{Fore.RED}[CRAWL]{Style.RESET_ALL} All connection attempts failed: {e}")
+            return []
+    
     crawled_urls = set()
     to_crawl = [url]
     
@@ -1582,6 +1606,32 @@ def website_crawling(urls):
     """Enhanced website crawling phase with AI path prediction"""
     print(f"{Fore.CYAN}[PHASE 4.5]{Style.RESET_ALL} Website Crawling")
     
+    # Handle single URL input
+    if isinstance(urls, str):
+        urls = [urls]
+    elif not urls:
+        urls = []
+        if args.url:
+            urls.append(args.url)
+    
+    if not urls:
+        print(f"{Fore.YELLOW}[!]{Style.RESET_ALL} No URLs found for crawling")
+        return {}
+        
+    results = {}
+    for url in urls:
+        print(f"{Fore.CYAN}[CRAWL]{Style.RESET_ALL} Starting crawl for {url}")
+        crawled = crawl_website(url)
+        if crawled:
+            results[url] = crawled
+            print(f"{Fore.GREEN}[CRAWL]{Style.RESET_ALL} Found {len(crawled)} URLs for {url}")
+    
+    return results
+    
+    if not urls:
+        print(f"{Fore.YELLOW}[!]{Style.RESET_ALL} No URLs found for crawling")
+        return {}
+        
     print(f"{Fore.CYAN}[INFO]{Style.RESET_ALL} Crawling {len(urls)} URLs...")
     
     # AI-enhanced crawling patterns
@@ -2408,9 +2458,16 @@ def run():
         
         # PHASE 4.5: Website Crawling - ENHANCED TO CRAWL ALL URLS
         if args.crawl or args.scan or args.full_scan:
-            if all_urls:
+            if args.url:  # Check for direct URL mode
                 print(f"\n{Fore.CYAN}[PHASE 4.5]{Style.RESET_ALL} Website Crawling")
-                crawl_results = website_crawling(all_urls)  # Now crawls ALL URLs
+                url_results = website_crawling(args.url)
+                target_results["crawling"] = url_results
+                # Add crawled URLs to all_urls
+                for url, crawled_urls in url_results.items():
+                    all_urls.update(crawled_urls)
+            elif all_urls:  # Fallback to scanning discovered URLs
+                print(f"\n{Fore.CYAN}[PHASE 4.5]{Style.RESET_ALL} Website Crawling")
+                crawl_results = website_crawling(all_urls)
                 target_results["crawling"] = crawl_results
                 # Add crawled URLs to all_urls
                 for url, crawled_urls in crawl_results.items():
