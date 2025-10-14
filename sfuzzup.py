@@ -30,7 +30,7 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Tool metadata
-__version__ = "4.9.0"
+__version__ = "1.0.0"
 __author__ = "Suman Das"
 __license__ = "MIT"
 
@@ -42,8 +42,8 @@ BANNER = rf"""
  ██╔════╝██╔════╝██║   ██║╚══███╔╝╚══███╔╝
  ███████╗█████╗  ██║   ██║  ███╔╝   ███╔╝ 
  ╚════██║██╔══╝  ██║   ██║ ███╔╝   ███╔╝  
- ███████║███████╗╚██████╔╝███████╗███████╗
- ╚══════╝╚══════╝ ╚═════╝ ╚══════╝╚══════╝
+ ███████║██      ╚██████╔╝███████╗███████╗
+ ╚══════╝╚═      ╚═════╝ ╚══════╝╚══════╝
 {Style.RESET_ALL}
         Advanced Security Fuzzing & Scanning Platform v{__version__}
     ──────────────────────────────────────────────────────────
