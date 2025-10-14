@@ -1,4 +1,4 @@
-# SFUZZ — Advanced Security Fuzzing & Scanning Platform
+# SFUZZ — AI-Powered Security Fuzzing & Scanning Platform
 
 **Author:** Suman Das
 **Version:** 1.0.0
@@ -8,7 +8,39 @@
 
 ## Overview
 
-SFUZZ is an opinionated, modular security fuzzing and scanning framework written in Python 3. It combines passive and active reconnaissance, port and directory scanning, crawling, and basic vulnerability scanning with optional AI-assisted enhancements. The tool supports different AI modes (fast, smart, aggressive, deep) and integrates with a local Ollama instance for advanced on-device model-based analysis. A companion Bash installer is included to help set up Ollama and download common models.
+SFUZZ is a next-generation security scanning platform that leverages advanced AI capabilities to revolutionize penetration testing and vulnerability assessment. Built with Python 3, it combines intelligent reconnaissance, smart fuzzing, and adaptive scanning techniques.
+
+### Key Capabilities:
+
+🤖 **Advanced AI Integration**
+- Multiple AI operation modes: Fast, Smart, Aggressive, Deep
+- Intelligent pattern recognition and learning
+- AI-powered subdomain enumeration
+- Smart wordlist generation
+- Adaptive scanning strategies
+
+🔍 **Comprehensive Reconnaissance**
+- 15+ integrated passive sources
+- Pattern-based subdomain discovery
+- Intelligent DNS validation
+- Advanced HTTP probing
+- Recursive enumeration
+
+🌐 **Enhanced Web Analysis**
+- JavaScript reconnaissance
+- Endpoint discovery
+- Technology stack detection
+- Framework identification
+- Cloud service detection
+
+⚡ **Performance & Reliability**
+- Multi-threaded operations
+- Smart error handling
+- Adaptive rate limiting
+- Progress monitoring
+- Comprehensive reporting
+
+The platform integrates seamlessly with Ollama for local AI model execution, ensuring both performance and data privacy. Whether you're conducting a quick assessment or an in-depth security audit, SFUZZ adapts its strategies based on the target and scanning context.
 
 This repository contains:
 
