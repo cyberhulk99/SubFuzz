@@ -1,7 +1,7 @@
 # SFUZZ — Advanced Security Fuzzing & Scanning Platform
 
 **Author:** Suman Das
-**Version:** 4.9.0
+**Version:** 1.0.0
 **License:** MIT
 
 ---
@@ -38,14 +38,54 @@ After cloning, review `tools/SubFuzz/README.md` for SubFuzz-specific usage. You 
 
 ## Features
 
-* Passive reconnaissance: crt.sh, Wayback Machine and common-subdomain seed list
-* Active brute-force subdomain enumeration with optional AI-driven selection
-* HTTP probing (http/https) with robust error handling
-* Port scanning (host-level TCP checks)
-* Directory and file discovery (multi-threaded)
-* Simple website crawling and link discovery
-* Integration with Nuclei (if installed) for template-based vulnerability detection
-* Optional AI support: on-device Ollama integration (local models)
+### AI-Powered Analysis
+* Advanced AISubdomainAnalyzer for pattern-based enumeration
+  - Intelligent pattern learning from discovered subdomains
+  - Industry-specific pattern recognition
+  - Adaptive subdomain generation
+  - Multi-level recursive discovery
+
+* Enhanced AIPenetrationSystem
+  - Smart AI mode selection (fast, smart, aggressive, deep)
+  - Real-time pattern analysis
+  - Ollama integration for advanced AI capabilities
+  - Intelligent wordlist generation
+
+### Reconnaissance
+* Comprehensive Passive Recon from 15+ sources:
+  - Certificate Transparency logs (crt.sh)
+  - Wayback Machine analysis
+  - DNS records analysis
+  - Multiple API integrations
+  - Common subdomain patterns
+
+* Advanced Active Enumeration
+  - AI-driven wordlist selection
+  - Pattern-based recursive discovery
+  - Intelligent DNS validation
+  - HTTP/HTTPS probing with robust error handling
+
+### Web Analysis
+* JavaScript Reconnaissance
+  - Automated JS file discovery
+  - API endpoint extraction
+  - Secret detection
+  - Import analysis
+  - WebSocket endpoint detection
+
+* Enhanced Technology Stack Detection
+  - Framework identification
+  - Cloud service detection
+  - Security tool recognition
+  - Infrastructure analysis
+  - CMS identification
+
+### Security Features
+* Multi-threaded scanning capabilities
+* Intelligent error handling
+* Rate limiting and timeout controls
+* Stealth mode for careful scanning
+* Comprehensive output formats
 
 ---
 
@@ -249,10 +289,11 @@ MIT © Suman Das
 
 ## Changelog (high-level)
 
-* v4.9.0 — Major AI enhancements:
-  - Added AISubdomainAnalyzer for intelligent pattern learning
-  - Enhanced AIPenetrationSystem with better Ollama integration
-  - Added JavaScript reconnaissance capabilities
-  - Improved technology stack detection
-  - Enhanced directory scanning with AI path prediction
-* v4.8.1 — AI integration improved, HTTP probing hardened, better defaults
+* v1.0.0 — Initial Release with Advanced Features:
+  - Implemented AISubdomainAnalyzer with pattern learning
+  - Enhanced AIPenetrationSystem with Ollama integration
+  - Added comprehensive JavaScript reconnaissance
+  - Advanced technology stack detection
+  - Intelligent directory scanning with AI path prediction
+  - Multi-source passive reconnaissance
+  - Enhanced active enumeration capabilities
