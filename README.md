@@ -1,7 +1,7 @@
 # SFUZZ — Advanced Security Fuzzing & Scanning Platform
 
 **Author:** Suman Das
-**Version:** 4.8.1
+**Version:** 4.9.0
 **License:** MIT
 
 ---
@@ -55,6 +55,19 @@ After cloning, review `tools/SubFuzz/README.md` for SubFuzz-specific usage. You 
 * `pip` for Python packages
 * Optional (recommended): `nuclei` installed and in `$PATH`
 * Optional: `ollama` and one or more models (for AI features)
+
+### Wordlists
+The tool requires wordlists for effective scanning. Due to size constraints, large wordlists are not included in the repository. You can:
+
+1. Download the 2m-subdomains.txt wordlist from SecLists:
+```bash
+mkdir -p wordlists/subdomains
+curl -o wordlists/subdomains/2m-subdomains.txt https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/DNS/subdomains-top1million-20000.txt
+```
+
+2. Or use your own custom wordlists by placing them in:
+   - `wordlists/subdomains/` - for subdomain wordlists
+   - `wordlists/dirs/` - for directory wordlists
 
 Python dependencies (install with pip):
 
@@ -227,4 +240,10 @@ MIT © Suman Das
 
 ## Changelog (high-level)
 
+* v4.9.0 — Major AI enhancements:
+  - Added AISubdomainAnalyzer for intelligent pattern learning
+  - Enhanced AIPenetrationSystem with better Ollama integration
+  - Added JavaScript reconnaissance capabilities
+  - Improved technology stack detection
+  - Enhanced directory scanning with AI path prediction
 * v4.8.1 — AI integration improved, HTTP probing hardened, better defaults
