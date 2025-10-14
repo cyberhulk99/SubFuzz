@@ -1341,13 +1341,41 @@ def port_scan_host(host, ports):
     return open_ports
 
 def port_scanning(subdomains):
-    """Port scanning phase"""
+    """Port scanning phase with AI-enhanced port selection"""
     print(f"{Fore.CYAN}[PHASE 3]{Style.RESET_ALL} Port Scanning")
     
     if args.ports:
         ports = [int(p) for p in args.ports.split(",")]
     else:
         ports = COMMON_PORTS
+        
+    # AI-enhanced port selection
+    if ai_system.ollama_available and args.ai_scan:
+        print(f"{Fore.CYAN}[AI]{Style.RESET_ALL} Analyzing targets for service patterns...")
+        for subdomain in subdomains:
+            prompt = f"""
+            Analyze this subdomain and predict potential services/ports:
+            Subdomain: {subdomain}
+            
+            Consider:
+            1. Common web services (HTTP/S, APIs)
+            2. Database ports (MySQL, PostgreSQL, MongoDB)
+            3. Development services (SSH, FTP)
+            4. Application-specific ports
+            5. Microservices architecture
+            
+            Return only port numbers, one per line.
+            """
+            ai_ports = ai_system.query_ollama(prompt)
+            if ai_ports:
+                for port in ai_ports.splitlines():
+                    try:
+                        port_num = int(port.strip())
+                        if port_num > 0 and port_num < 65536:  # Valid port range
+                            ports.append(port_num)
+                    except:
+                        continue
+        ports = list(set(ports))  # Remove duplicates
     
     print(f"{Fore.CYAN}[INFO]{Style.RESET_ALL} Scanning {len(subdomains)} hosts on {len(ports)} ports...")
     
@@ -1422,13 +1450,38 @@ def directory_scan(url, wordlist):
     return found_paths
 
 def directory_scanning(urls):
-    """Enhanced directory scanning phase - SCAN ALL URLS"""
+    """Enhanced directory scanning phase with AI - SCAN ALL URLS"""
     print(f"{Fore.CYAN}[PHASE 4]{Style.RESET_ALL} Directory Scanning")
     
     if args.dir_wordlist:
         wordlist_path = args.dir_wordlist
     else:
         wordlist_path = get_default_wordlist("dirs")
+    
+    # AI-enhanced directory prediction
+    if ai_system.ollama_available and args.ai_scan:
+        print(f"{Fore.CYAN}[AI]{Style.RESET_ALL} Analyzing target for custom directory patterns...")
+        for url in urls:
+            prompt = f"""
+            Analyze this URL and predict potential high-value directories:
+            URL: {url}
+            
+            Consider:
+            1. Common web frameworks and their directory structures
+            2. Development environments (dev, staging, test)
+            3. Application-specific paths
+            4. Admin interfaces and dashboards
+            5. API endpoints and documentation
+            6. Backup and configuration files
+            
+            Return only paths, one per line.
+            """
+            ai_paths = ai_system.query_ollama(prompt)
+            if ai_paths:
+                with open(wordlist_path, 'a') as f:
+                    for path in ai_paths.splitlines():
+                        if path.strip() and len(path.strip()) < 50:  # Sanity check
+                            f.write(f"{path.strip()}\n")
     
     print(f"{Fore.CYAN}[INFO]{Style.RESET_ALL} Scanning {len(urls)} URLs for directories...")
     
@@ -1526,10 +1579,37 @@ def crawl_website(url, max_pages=100):
     return list(crawled_urls)
 
 def website_crawling(urls):
-    """Enhanced website crawling phase - CRAWL ALL LIVE SUBDOMAINS"""
+    """Enhanced website crawling phase with AI path prediction"""
     print(f"{Fore.CYAN}[PHASE 4.5]{Style.RESET_ALL} Website Crawling")
     
     print(f"{Fore.CYAN}[INFO]{Style.RESET_ALL} Crawling {len(urls)} URLs...")
+    
+    # AI-enhanced crawling patterns
+    if ai_system.ollama_available and args.ai_scan:
+        print(f"{Fore.CYAN}[AI]{Style.RESET_ALL} Analyzing websites for intelligent crawling...")
+        for url in urls:
+            prompt = f"""
+            Analyze this website URL for potential valuable paths:
+            URL: {url}
+            
+            Consider:
+            1. Common web application structures
+            2. Content management systems
+            3. API documentation paths
+            4. Authentication endpoints
+            5. Admin interfaces
+            6. Development resources
+            7. JavaScript and asset locations
+            
+            Return only paths, one per line.
+            """
+            ai_paths = ai_system.query_ollama(prompt)
+            if ai_paths:
+                for path in ai_paths.splitlines():
+                    path = path.strip()
+                    if path and len(path) < 100:  # Sanity check
+                        full_url = urljoin(url, path)
+                        discovered_urls.add(full_url)
     
     results = {}
     # CRAWL ALL URLS, not just first 3
