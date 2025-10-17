@@ -302,15 +302,27 @@ From non-tech to security tooling - Let's make security tools smarter together! 
 
 ## Changelog (high-level)
 
-* v1.0.1 — Feature Enhancements & Documentation Update:
-  - Added custom wordlist support with -w flag
-  - Improved error handling and request timeout controls
+* v1.0.1 — Major Bug Fixes & Feature Enhancements:
+  - Fixed bugs in HTTP request handling and timeout management
+  - Fixed threading issues in concurrent scanning operations
+  - Fixed DNS resolution failures and improved error handling
+  - Fixed file path handling issues in wordlist processing
+  - Fixed memory leaks in long-running scans
+  - Fixed issues with output file handling and reporting
+  - Fixed character encoding issues in wordlist processing
+  - Added robust error recovery for network failures
+  - Improved response parsing and validation
+  - Enhanced JavaScript file analysis accuracy
+  - Optimized memory usage for large scans
+  - Added progress indicators for long operations
+  - Improved console output formatting
+  - Added detailed error messages and debugging info
   - Enhanced stealth mode capabilities
   - Added multi-threading configuration with --workers flag
-  - Implemented enhanced output options and file export
-  - Updated documentation for better clarity and organization
-  - Added comprehensive integration guidelines
-  - Improved installation and setup instructions
+  - Added support for custom timeout values
+  - Added flexible wordlist support with -w flag
+  - Implemented smart output handling
+  - Updated documentation for clarity
 
 * v1.0.0 — Initial Release with Advanced Features:
   - Implemented AISubdomainAnalyzer with pattern learning
