@@ -1,0 +1,161 @@
+# Common Subdomains - Security Testing
+# Top-level
+www
+mail
+ftp
+admin
+blog
+
+# Development & Testing
+dev
+test
+stage
+staging
+qa
+sandbox
+demo
+beta
+
+# APIs & Services
+api
+apis
+app
+apps
+auth
+cdn
+gateway
+graphql
+ws
+soap
+
+# Infrastructure
+db
+dns
+mx
+ns1
+ns2
+ns3
+proxy
+vpn
+router
+fw
+firewall
+
+# Content & Media
+cdn
+media
+img
+images
+assets
+static
+files
+download
+uploads
+
+# Collaboration & Tools
+git
+svn
+jenkins
+jira
+wiki
+docs
+confluence
+portal
+
+# Marketing & Sales
+shop
+store
+cart
+checkout
+payment
+billing
+crm
+
+# Communication
+chat
+meet
+video
+mail
+smtp
+pop
+imap
+webmail
+
+# Environments
+prod
+production
+staging
+dev
+development
+test
+testing
+uat
+qa
+demo
+
+# Internal Systems
+internal
+intranet
+corp
+corporate
+admin
+administrator
+staff
+employee
+
+# Security
+auth
+login
+sso
+vpn
+secure
+security
+
+# Monitoring & Logs
+monitor
+logging
+logs
+status
+health
+metrics
+grafana
+kibana
+
+# Geographic
+us
+eu
+asia
+uk
+de
+fr
+ca
+
+# Mobile & Web
+m
+mobile
+wap
+app
+web
+www2
+ww2
+
+# Version Control
+v1
+v2
+v3
+api-v1
+api-v2
+beta
+staging
+
+# Miscellaneous
+old
+new
+backup
+archive
+temp
+cache
+public
+private
+service
+services
