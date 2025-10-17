@@ -1,41 +1,6 @@
 # SFUZZ — AI-Powered Security Fuzzing & Scanning Platform
 
-## Quick Start
-
-### 1. Install Dependencies
-
-```bash
-# Clone the repository
-git clone https://github.com/sdicssh1999/SubFuzz.git
-cd SubFuzz
-
-# Create and activate virtual environment
-python3 -m venv sfuzz-env
-source sfuzz-env/bin/activate  # On Windows: sfuzz-env\Scripts\activate
-
-# Install Python dependencies
-pip install -r requirements.txt
-```
-
-### 2. Install Ollama (Required for AI features)
-
-The script includes an installation guide:
-```bash
-chmod +x install_ollama.sh
-./install_ollama.sh
-```
-
-Or install manually:
-- **macOS**: `brew install ollama`
-- **Linux**: `curl -fsSL https://ollama.ai/install.sh | sh`
-- **Other**: Visit [ollama.ai/download](https://ollama.ai/download)
-
-After installation:
-1. Start Ollama service: `ollama serve`
-2. Download required model: `ollama pull llama2`
-3. Verify installation: `ollama list`
-
-**Author:** Suman Das
+**Author:** @cyberhulk99 (From non-tech to security tooling)
 **Version:** 1.0.1
 **License:** MIT
 
@@ -48,32 +13,34 @@ SFUZZ is a next-generation security scanning platform that leverages advanced AI
 ### Key Capabilities:
 
 🤖 **Advanced AI Integration**
-- Multiple AI operation modes: Fast, Smart, Aggressive, Deep
+- 4 Specialized AI Modes: Fast/Smart/Aggressive/Deep
 - Intelligent pattern recognition and learning
-- AI-powered subdomain enumeration
+- Self-learning subdomain patterns
 - Smart wordlist generation
 - Adaptive scanning strategies
 
 🔍 **Comprehensive Reconnaissance**
-- 15+ integrated passive sources
-- Pattern-based subdomain discovery
+- 15+ integrated passive sources (crt.sh, certspotter, wayback, etc.)
+- AI-enhanced pattern-based discovery
 - Intelligent DNS validation
 - Advanced HTTP probing
 - Recursive enumeration
 
-🌐 **Enhanced Web Analysis**
-- JavaScript reconnaissance
-- Endpoint discovery
-- Technology stack detection
-- Framework identification
-- Cloud service detection
+🌐 **Next-Gen JavaScript Analysis**
+- Smart endpoint and API discovery
+- Hidden endpoint detection
+- Async processing for efficient operations
+- Pattern-based API identification
+- Real-time dependency analysis
+- WebSocket endpoint detection
 
-⚡ **Performance & Reliability**
+⚡ **Intelligent Scanning System**
+- Smart HTTP/HTTPS probing
+- Context-aware port scanning
+- AI-driven directory enumeration
+- Dynamic crawling with pattern recognition
 - Multi-threaded operations
-- Smart error handling
-- Adaptive rate limiting
 - Progress monitoring
-- Comprehensive reporting
 
 The platform integrates seamlessly with Ollama for local AI model execution, ensuring both performance and data privacy. Whether you're conducting a quick assessment or an in-depth security audit, SFUZZ adapts its strategies based on the target and scanning context.
 
@@ -105,18 +72,18 @@ After cloning, review `tools/SubFuzz/README.md` for SubFuzz-specific usage. You 
 
 ## Features
 
-### AI-Powered Analysis
-* Advanced AISubdomainAnalyzer for pattern-based enumeration
-  - Intelligent pattern learning from discovered subdomains
-  - Industry-specific pattern recognition
-  - Adaptive subdomain generation
-  - Multi-level recursive discovery
+### AI-Powered Core
+* 4 Distinct Scanning Modes:
+  - Fast: Quick reconnaissance
+  - Smart: Balanced scanning
+  - Aggressive: Deep enumeration
+  - Deep: Maximum discovery
 
-* Enhanced AIPenetrationSystem
-  - Smart AI mode selection (fast, smart, aggressive, deep)
-  - Real-time pattern analysis
-  - Ollama integration for advanced AI capabilities
-  - Intelligent wordlist generation
+* Intelligent Pattern Recognition:
+  - Self-learning subdomain patterns
+  - Adaptive scan behavior
+  - Dynamic wordlist generation
+  - Context-aware scanning
 
 ### Reconnaissance
 * Comprehensive Passive Recon from 15+ sources:
@@ -156,17 +123,49 @@ After cloning, review `tools/SubFuzz/README.md` for SubFuzz-specific usage. You 
 
 ---
 
-## Prerequisites
+## Installation
 
+### Prerequisites
 * Python 3.8+
-* `pip` for Python packages
-* Optional (recommended): `nuclei` installed and in `$PATH`
-* Optional: `ollama` and one or more models (for AI features)
+* pip for Python package installation
+* Optional: Ollama for enhanced AI features
 
-### Wordlists
-The tool requires wordlists for effective scanning. Due to size constraints, large wordlists are not included in the repository. You can:
+### Quick Start
 
-1. Download the Assetnote 2M subdomains wordlist (recommended):
+```bash
+# Clone the repository
+git clone https://github.com/cyberhulk99/SubFuzz.git
+cd SubFuzz
+
+# Install required packages
+pip install -r requirements.txt
+
+# Optional: Install Ollama for AI features
+chmod +x install_ollama.sh
+./install_ollama.sh
+```
+
+### Optional Components
+
+1. **Nuclei Integration**: 
+   - Follow official docs at `https://github.com/projectdiscovery/nuclei`
+
+2. **Ollama Setup (for AI features)**:
+   - Automated: Use provided `install_ollama.sh`
+   - Manual: Follow instructions at `https://ollama.ai`
+
+3. **External Tools**:
+   ```bash
+   # Example: Installing SubFuzz integration
+   mkdir -p tools
+   git clone https://github.com/sdicssh1999/SubFuzz.git tools/SubFuzz
+   ```
+
+### Wordlists Setup
+
+Large wordlists are not included but recommended for effective scanning:
+
+1. Download Assetnote 2M subdomains wordlist:
 ```bash
 mkdir -p wordlists/subdomains
 wget -O wordlists/subdomains/2m-subdomains.txt https://raw.githubusercontent.com/assetnote/commonspeak2-wordlists/master/subdomains/subdomains.txt
@@ -174,81 +173,34 @@ wget -O wordlists/subdomains/2m-subdomains.txt https://raw.githubusercontent.com
 # curl -o wordlists/subdomains/2m-subdomains.txt https://raw.githubusercontent.com/assetnote/commonspeak2-wordlists/master/subdomains/subdomains.txt
 ```
 
-This wordlist contains over 2 million unique subdomains gathered from various sources including:
+This comprehensive wordlist includes:
 - DNS datasets
 - CommonCrawl data
 - Certificate Transparency logs
 - Web crawling results
 - Public datasets
 
-2. Or use your own custom wordlists by placing them in:
-   - `wordlists/subdomains/` - for subdomain wordlists
-   - `wordlists/dirs/` - for directory wordlists
-
-Python dependencies (install with pip):
-
-```bash
-pip install -r requirements.txt
-# or individually:
-pip install requests colorama beautifulsoup4 dnspython
-```
-
-Create a `requirements.txt` with at least:
-
-```
-requests
-colorama
-beautifulsoup4
-dnspython
-```
+2. Custom Wordlists:
+   Place your wordlists in:
+   - `wordlists/subdomains/` - for subdomain lists
+   - `wordlists/dirs/` - for directory lists
 
 ---
 
-## Installation
+## Roadmap & Coming Soon
 
-1. Clone the repo:
+🚀 **Upcoming Features:**
 
-```bash
-git clone <repo-url>
-cd sfuzz
-```
+* Advanced vulnerability assessment modules
+* Enhanced smart rate limiting system
+* Comprehensive security header analysis
+* Automated reporting system
+* CI/CD pipeline integration
+* Performance benchmarking
+* Advanced AI features
+* Scan resumption capability
 
-2. Install Python dependencies (see Prerequisites).
-
-3. (Optional) Install `nuclei` by following the official docs (`https://github.com/projectdiscovery/nuclei`).
-
-4. (Optional) If you want AI features, install Ollama:
-
-* Manual way: follow the instructions at `https://ollama.ai` for your OS.
-* Automated: run the provided installer script `install_ollama.sh` (see **Ollama Installer** section below).
-
-5. (Optional) Add integrations like SubFuzz:
-
-```bash
-# clone SubFuzz into the tools folder
-mkdir -p tools
-git clone https://github.com/sdicssh1999/SubFuzz.git tools/SubFuzz
-```
-
----
-
-## install_ollama.sh (Ollama Auto-Installer)
-
-A helper script, `install_ollama.sh`, is included to simplify Ollama setup (it will not bypass the official install steps where required). Make the script executable and run it as root or with sudo:
-
-```bash
-chmod +x install_ollama.sh
-sudo ./install_ollama.sh
-```
-
-**What the installer does (high level):**
-
-* Checks whether `ollama` binary is present
-* Attempts to start the Ollama service (via `brew services` on macOS if available, or `ollama serve` directly)
-* Attempts to pull a list of models (defaults try `llama2` and `codellama`) using `ollama pull`
-* Verifies the service is accessible at `http://localhost:11434`
-
-> Note: Ollama distribution packaging and installation requires platform-specific steps (root permissions). The script guides you and provides manual steps if automatic install is not possible.
+These features are actively being developed. Stay tuned for updates!
 
 ---
 
@@ -336,32 +288,44 @@ proc = subprocess.run(subfuzz_cmd, capture_output=True, text=True, timeout=300)
 
 ---
 
+---
+
 ## Contributing
 
-Contributions are welcome. Please open issues/PRs for new integrations, bug fixes, or improvements. Keep PRs small and focused.
+Your feedback and contributions are welcome! Particularly interested in:
+* Real-world testing scenarios
+* Performance optimization ideas
+* Feature suggestions
+* Security research use cases
+
+---
+
+## Security Notice
+
+* Run only against systems you own or have explicit permission to test
+* Use `--stealth` mode for careful scanning
+* Consider rate limiting for production systems
+* Review and respect target system's security policies
 
 ---
 
 ## License
 
-MIT © Suman Das
+MIT © @cyberhulk99
+
+---
+
+## Connect & Contribute
+
+* GitHub: [@cyberhulk99](https://github.com/cyberhulk99)
+* Issues/Features: [Issue Tracker](https://github.com/cyberhulk99/SubFuzz/issues)
+* Join the discussion: [Discussions](https://github.com/cyberhulk99/SubFuzz/discussions)
+
+From non-tech to security tooling - Let's make security tools smarter together! 🛡️
 
 ---
 
 ## Changelog (high-level)
-
-* v1.0.1 — Feature Enhancement Release (October 17, 2025):
-  - Added version fingerprinting in technology detection
-  - Enhanced vulnerability scanning capabilities
-  - Improved XSS detection with stored XSS support
-  - Added time-based SQL injection detection
-  - Enhanced crawling with form detection
-  - Improved JavaScript parsing and analysis
-  - Added comprehensive error handling system
-  - Added smart rate limiting with domain intelligence
-  - Implemented state management for scan resumption
-  - Enhanced security headers analysis
-  - Improved AI-powered subdomain discovery
 
 * v1.0.0 — Initial Release with Advanced Features:
   - Implemented AISubdomainAnalyzer with pattern learning
