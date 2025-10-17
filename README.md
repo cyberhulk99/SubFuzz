@@ -36,7 +36,7 @@ After installation:
 3. Verify installation: `ollama list`
 
 **Author:** Suman Das
-**Version:** 1.0.0
+**Version:** 1.0.1
 **License:** MIT
 
 ---
@@ -355,6 +355,19 @@ MIT © Suman Das
 ---
 
 ## Changelog (high-level)
+
+* v1.0.1 — Feature Enhancement Release (October 17, 2025):
+  - Added version fingerprinting in technology detection
+  - Enhanced vulnerability scanning capabilities
+  - Improved XSS detection with stored XSS support
+  - Added time-based SQL injection detection
+  - Enhanced crawling with form detection
+  - Improved JavaScript parsing and analysis
+  - Added comprehensive error handling system
+  - Added smart rate limiting with domain intelligence
+  - Implemented state management for scan resumption
+  - Enhanced security headers analysis
+  - Improved AI-powered subdomain discovery
 
 * v1.0.0 — Initial Release with Advanced Features:
   - Implemented AISubdomainAnalyzer with pattern learning

