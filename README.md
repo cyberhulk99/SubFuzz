@@ -54,20 +54,6 @@ This repository contains:
 
 ---
 
-## New: SubFuzz Integration
-
-SFUZZ can integrate with the external SubFuzz repository to provide additional subdomain bruteforce and fuzzing functionality. Clone SubFuzz into the `tools/` directory to keep integrations organized.
-
-To add SubFuzz:
-
-```bash
-# from the repo root
-mkdir -p tools
-git clone https://github.com/sdicssh1999/SubFuzz.git tools/SubFuzz
-```
-
-After cloning, review `tools/SubFuzz/README.md` for SubFuzz-specific usage. You can optionally add wrappers in `sfuzz.py` to call SubFuzz as a subprocess when `--use-subfuzz` (or similar) flag is implemented.
-
 ---
 
 ## Features
@@ -154,12 +140,10 @@ chmod +x install_ollama.sh
    - Automated: Use provided `install_ollama.sh`
    - Manual: Follow instructions at `https://ollama.ai`
 
-3. **External Tools**:
-   ```bash
-   # Example: Installing SubFuzz integration
-   mkdir -p tools
-   git clone https://github.com/sdicssh1999/SubFuzz.git tools/SubFuzz
-   ```
+3. **External Tools Integration**:
+   - Place external tools in the `tools/` directory
+   - Enable via appropriate CLI flags
+   - See Integration Tips section for best practices
 
 ### Wordlists
 
@@ -259,15 +243,9 @@ python3 sfuzz.py -d example.com --ai-mode off --no-ai-download
 
 ## Integration Tips
 
-* To call SubFuzz from SFUZZ, add a small wrapper function in `sfuzz.py` that runs SubFuzz with subprocess and captures output. Example pseudocode in Python:
-
-```python
-subfuzz_cmd = ["python3", "tools/SubFuzz/subfuzz.py", "-d", domain, "--wordlist", "wordlists/subdomains/custom.txt"]
-proc = subprocess.run(subfuzz_cmd, capture_output=True, text=True, timeout=300)
-# parse proc.stdout and add discovered subdomains to discovered_subdomains set
-```
-
-* Keep external tools in `tools/` and refer to them from the main script. Add CLI flags to enable/disable each integration.
+* Keep external tools in `tools/` and refer to them from the main script
+* Use appropriate CLI flags to enable/disable integrations
+* Follow modular design patterns for new integrations
 
 ---
 
@@ -285,8 +263,6 @@ proc = subprocess.run(subfuzz_cmd, capture_output=True, text=True, timeout=300)
 * **Ollama not starting:** Inspect `/tmp/ollama.log` (the installer writes logs there when starting `ollama serve`), and run `ollama serve` manually to view live output.
 * **crt.sh or Wayback API failures:** Often transient — try again or increase `--timeout`.
 * **Nuclei CLI issues:** Ensure `nuclei` is in your `$PATH` and you have an up-to-date templates repository.
-
----
 
 ---
 
