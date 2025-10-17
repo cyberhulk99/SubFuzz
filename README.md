@@ -179,7 +179,6 @@ Note: You're not limited to any specific wordlist. The tool is designed to work 
 * Enhanced smart rate limiting system
 * Comprehensive security header analysis
 * Automated reporting system
-* CI/CD pipeline integration
 * Performance benchmarking
 * Advanced AI features
 * Scan resumption capability
