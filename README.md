@@ -302,6 +302,16 @@ From non-tech to security tooling - Let's make security tools smarter together! 
 
 ## Changelog (high-level)
 
+* v1.0.1 — Feature Enhancements & Documentation Update:
+  - Added custom wordlist support with -w flag
+  - Improved error handling and request timeout controls
+  - Enhanced stealth mode capabilities
+  - Added multi-threading configuration with --workers flag
+  - Implemented enhanced output options and file export
+  - Updated documentation for better clarity and organization
+  - Added comprehensive integration guidelines
+  - Improved installation and setup instructions
+
 * v1.0.0 — Initial Release with Advanced Features:
   - Implemented AISubdomainAnalyzer with pattern learning
   - Enhanced AIPenetrationSystem with Ollama integration
