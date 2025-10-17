@@ -340,12 +340,6 @@ proc = subprocess.run(subfuzz_cmd, capture_output=True, text=True, timeout=300)
 
 Contributions are welcome. Please open issues/PRs for new integrations, bug fixes, or improvements. Keep PRs small and focused.
 
-Suggested areas:
-
-* Add support for ProjectDiscovery tools (subfinder, httpx, gau) as optional subprocess integrations
-* Replace basic socket-based port scanning with `nmap`-driven scans for accuracy
-* Improve result export formats (CSV/HTML/JSON)
-
 ---
 
 ## License
