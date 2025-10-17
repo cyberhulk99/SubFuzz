@@ -1,5 +1,19 @@
+# Core dependencies
 requests>=2.28.0
 colorama>=0.4.6
 dnspython>=2.3.0
 beautifulsoup4>=4.11.0
 urllib3>=1.26.0
+
+# Additional recommendations
+# Ollama (required for AI features) - Install separately:
+# macOS: brew install ollama
+# Linux: curl -fsSL https://ollama.ai/install.sh | sh
+# Or visit: https://ollama.ai/download
+
+# Optional tools that enhance functionality if available:
+# - subfinder: https://github.com/projectdiscovery/subfinder
+# - amass: https://github.com/OWASP/Amass
+# - assetfinder: https://github.com/tomnomnom/assetfinder
+# - findomain: https://github.com/Findomain/Findomain
+# - nuclei: https://github.com/projectdiscovery/nuclei

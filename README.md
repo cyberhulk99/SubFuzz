@@ -1,5 +1,40 @@
 # SFUZZ — AI-Powered Security Fuzzing & Scanning Platform
 
+## Quick Start
+
+### 1. Install Dependencies
+
+```bash
+# Clone the repository
+git clone https://github.com/sdicssh1999/SubFuzz.git
+cd SubFuzz
+
+# Create and activate virtual environment
+python3 -m venv sfuzz-env
+source sfuzz-env/bin/activate  # On Windows: sfuzz-env\Scripts\activate
+
+# Install Python dependencies
+pip install -r requirements.txt
+```
+
+### 2. Install Ollama (Required for AI features)
+
+The script includes an installation guide:
+```bash
+chmod +x install_ollama.sh
+./install_ollama.sh
+```
+
+Or install manually:
+- **macOS**: `brew install ollama`
+- **Linux**: `curl -fsSL https://ollama.ai/install.sh | sh`
+- **Other**: Visit [ollama.ai/download](https://ollama.ai/download)
+
+After installation:
+1. Start Ollama service: `ollama serve`
+2. Download required model: `ollama pull llama2`
+3. Verify installation: `ollama list`
+
 **Author:** Suman Das
 **Version:** 1.0.0
 **License:** MIT
