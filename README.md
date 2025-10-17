@@ -161,29 +161,29 @@ chmod +x install_ollama.sh
    git clone https://github.com/sdicssh1999/SubFuzz.git tools/SubFuzz
    ```
 
-### Wordlists Setup
+### Wordlists
 
-Large wordlists are not included but recommended for effective scanning:
+You can use wordlists in two ways:
 
-1. Download Assetnote 2M subdomains wordlist:
-```bash
-mkdir -p wordlists/subdomains
-wget -O wordlists/subdomains/2m-subdomains.txt https://raw.githubusercontent.com/assetnote/commonspeak2-wordlists/master/subdomains/subdomains.txt
-# If wget is not available, use curl:
-# curl -o wordlists/subdomains/2m-subdomains.txt https://raw.githubusercontent.com/assetnote/commonspeak2-wordlists/master/subdomains/subdomains.txt
-```
+1. **Using Custom Wordlists (Recommended)**:
+   - Use any wordlist directly with the `-w` flag:
+     ```bash
+     python3 sfuzz.py -d example.com -w /path/to/your/wordlist.txt
+     ```
+   - This gives you flexibility to use your preferred wordlists
 
-This comprehensive wordlist includes:
-- DNS datasets
-- CommonCrawl data
-- Certificate Transparency logs
-- Web crawling results
-- Public datasets
+2. **Default Wordlists (Optional)**:
+   - The tool can also use wordlists from the `wordlists/` directory
+   - For subdomain scanning: `wordlists/subdomains/`
+   - For directory scanning: `wordlists/dirs/`
+   - Example with default location:
+     ```bash
+     # If you want to use the default location, just place your list here:
+     mkdir -p wordlists/subdomains
+     cp your-wordlist.txt wordlists/subdomains/
+     ```
 
-2. Custom Wordlists:
-   Place your wordlists in:
-   - `wordlists/subdomains/` - for subdomain lists
-   - `wordlists/dirs/` - for directory lists
+Note: You're not limited to any specific wordlist. The tool is designed to work with any text-based wordlist through the `-w` flag.
 
 ---
 
