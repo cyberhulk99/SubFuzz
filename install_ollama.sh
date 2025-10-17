@@ -1,5 +1,5 @@
 #!/bin/bash
-# SFUZZ - Ollama Auto-Installer and Setup Guide
+# SFUZZ - Ollama Auto-Installer (Fixed Version)
 # Author: Suman Das
 # License: MIT
 
