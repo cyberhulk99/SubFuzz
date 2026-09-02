@@ -1,0 +1,12 @@
+name: Polaris SCR
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  scr:
+    uses: tripsure/polaris-workflows/.github/workflows/polaris-scr.yml@main
+    with:
+      app_key: subfuzz
