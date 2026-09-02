@@ -6,6 +6,16 @@ on:
   pull_request:
     branches: ["main"]
 
+# Declared explicitly rather than left to the repo's default GITHUB_TOKEN
+# setting — matches exactly what the reusable workflow below actually
+# needs, no more. (CodeQL flags a caller workflow with no permissions block
+# as actions/missing-workflow-permissions; this is that fix.)
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: read
+  security-events: write
+
 jobs:
   scr:
     uses: cyberhulk99/polaris-workflows/.github/workflows/polaris-scr.yml@main
