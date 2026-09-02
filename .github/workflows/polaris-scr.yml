@@ -2,8 +2,9 @@ name: Polaris SCR
 
 on:
   push:
-    branches: [main]
+    branches: ["main"]
   pull_request:
+    branches: ["main"]
 
 jobs:
   scr:
@@ -11,8 +12,3 @@ jobs:
     with:
       app_key: subfuzz
       polaris_url: https://mom-walter-revenues-rugs.trycloudflare.com
-
-
-
-
-
