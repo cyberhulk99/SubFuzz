@@ -10,7 +10,7 @@ jobs:
     uses: cyberhulk99/polaris-workflows/.github/workflows/polaris-scr.yml@main
     with:
       app_key: subfuzz
-      polaris_url: https://using-recognized-could-alignment.trycloudflare.com
+      polaris_url: https://mom-walter-revenues-rugs.trycloudflare.com
 
 
 
