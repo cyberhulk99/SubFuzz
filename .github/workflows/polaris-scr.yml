@@ -10,3 +10,4 @@ jobs:
     uses: cyberhulk99/polaris-workflows/.github/workflows/polaris-scr.yml@main
     with:
       app_key: subfuzz
+
