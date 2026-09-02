@@ -22,4 +22,4 @@ jobs:
     with:
       app_key: subfuzz
       polaris_url: https://mom-walter-revenues-rugs.trycloudflare.com
-      rules_repo_owner: cyberhulk99
+      rules_repo: cyberhulk99/polaris-workflows
