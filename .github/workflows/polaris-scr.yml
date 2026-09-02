@@ -7,6 +7,6 @@ on:
 
 jobs:
   scr:
-    uses: tripsure/polaris-workflows/.github/workflows/polaris-scr.yml@main
+    uses: cyberhulk99/polaris-workflows/.github/workflows/polaris-scr.yml@main
     with:
       app_key: subfuzz
