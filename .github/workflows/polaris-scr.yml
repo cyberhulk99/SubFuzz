@@ -1,4 +1,4 @@
-name: Polaris SCR
+name: Polaris Security
 
 on:
   push:
@@ -7,8 +7,8 @@ on:
     branches: ["main"]
 
 # Declared explicitly rather than left to the repo's default GITHUB_TOKEN
-# setting — matches exactly what the reusable workflow below actually
-# needs, no more. (CodeQL flags a caller workflow with no permissions block
+# setting — matches exactly what the reusable workflows below actually
+# need, no more. (CodeQL flags a caller workflow with no permissions block
 # as actions/missing-workflow-permissions; this is that fix.)
 permissions:
   contents: read
@@ -21,5 +21,29 @@ jobs:
     uses: cyberhulk99/polaris-workflows/.github/workflows/polaris-scr.yml@main
     with:
       app_key: subfuzz
-      polaris_url: https://index-magazine-licensing-disks.trycloudflare.com
+      polaris_url: http://localhost:8092
+      rules_repo: cyberhulk99/polaris-workflows
+
+  sca:
+    uses: cyberhulk99/polaris-workflows/.github/workflows/polaris-sca.yml@main
+    with:
+      app_key: subfuzz
+      polaris_url: http://localhost:8092
+      rules_repo: cyberhulk99/polaris-workflows
+
+  # SBOM is "what's in the repo right now" — only meaningful on push, not a
+  # PR diff, so the job itself is skipped entirely for pull_request events
+  # rather than making the reusable workflow guess.
+  sbom:
+    if: github.event_name == 'push'
+    uses: cyberhulk99/polaris-workflows/.github/workflows/polaris-sbom.yml@main
+    with:
+      app_key: subfuzz
+      polaris_url: http://localhost:8092
+
+  cbom:
+    uses: cyberhulk99/polaris-workflows/.github/workflows/polaris-cbom.yml@main
+    with:
+      app_key: subfuzz
+      polaris_url: http://localhost:8092
       rules_repo: cyberhulk99/polaris-workflows
